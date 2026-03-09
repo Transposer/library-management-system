@@ -1,0 +1,149 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+enum Role {
+  STUDENT
+  LIBRARIAN
+  ADMIN
+}
+
+enum HoldStatus {
+  WAITING
+  READY
+  CANCELLED
+}
+
+model User {
+  id           String     @id @default(cuid())
+  name         String
+  email        String     @unique
+  passwordHash String
+  studentId    String?
+  role         Role       @default(STUDENT)
+  createdAt    DateTime   @default(now())
+
+  loans     Loan[]
+  ratings   Rating[]
+  holds     Hold[]
+  wishlists Wishlist[]
+  auditLogs AuditLog[]
+
+  @@index([role])
+  @@index([studentId])
+}
+
+model Book {
+  id            String     @id @default(cuid())
+  title         String
+  author        String
+  isbn          String     @unique
+  genre         String?
+  description   String?
+  language      String?
+  shelfLocation String?
+  available     Boolean    @default(true)
+  createdAt     DateTime   @default(now())
+
+  loans     Loan[]
+  ratings   Rating[]
+  holds     Hold[]
+  wishlists Wishlist[]
+
+  @@index([title])
+  @@index([author])
+  @@index([available])
+}
+
+model Loan {
+  id           String   @id @default(cuid())
+  bookId       String
+  userId       String
+  checkoutDate DateTime
+  dueDate      DateTime
+  returnDate   DateTime?
+  fineAmount   Decimal  @default(0)
+  finePaid     Boolean  @default(false)
+  fineForgiven Boolean  @default(false)
+  createdAt    DateTime @default(now())
+
+  book Book @relation(fields: [bookId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([bookId])
+  @@index([userId])
+  @@index([dueDate])
+}
+
+model Rating {
+  id        String   @id @default(cuid())
+  bookId    String
+  userId    String
+  stars     Int
+  createdAt DateTime @default(now())
+
+  book Book @relation(fields: [bookId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([bookId, userId])
+  @@index([bookId])
+  @@index([userId])
+}
+
+model Hold {
+  id        String     @id @default(cuid())
+  bookId    String
+  userId    String
+  status    HoldStatus @default(WAITING)
+  createdAt DateTime   @default(now())
+
+  book Book @relation(fields: [bookId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([bookId])
+  @@index([userId])
+  @@index([status])
+}
+
+model Wishlist {
+  id        String   @id @default(cuid())
+  bookId    String
+  userId    String
+  createdAt DateTime @default(now())
+
+  book Book @relation(fields: [bookId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([bookId])
+  @@index([userId])
+}
+
+model Config {
+  id    String @id @default(cuid())
+  key   String @unique
+  value String
+}
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  userId    String?
+  action    String
+  entity    String
+  entityId  String?
+  detail    String?
+  createdAt DateTime @default(now())
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([entity])
+  @@index([createdAt])
+}
