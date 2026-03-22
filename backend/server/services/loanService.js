@@ -172,8 +172,66 @@ async function createLoan(userId, payload) {
   };
 }
 
+async function renewLoan(userId, loanId) {
+  const loan = await prisma.loan.findUnique({
+    where: { id: loanId },
+    include: {
+      book: true,
+    },
+  });
+
+  if (!loan) {
+    throw new AppError(404, "借阅记录不存在");
+  }
+
+  if (loan.userId !== userId) {
+    throw new AppError(404, "借阅记录不存在或非当前用户");
+  }
+
+  if (loan.status !== "Borrowing") {
+    throw new AppError(400, "仅借阅中的图书可续借");
+  }
+
+  if (loan.renewalCount >= 1) {
+    throw new AppError(400, "已达续借次数上限");
+  }
+
+  const now = new Date();
+  if (loan.dueDate < now) {
+    throw new AppError(400, "已逾期的图书不可续借");
+  }
+
+  const otherHold = await prisma.hold.findFirst({
+    where: {
+      bookId: loan.bookId,
+      userId: { not: userId },
+      status: { in: ["WAITING", "READY"] },
+    },
+  });
+
+  if (otherHold) {
+    throw new AppError(400, "该书已被其他读者预约，不可续借");
+  }
+
+  const newDueDate = addDays(loan.dueDate, 30);
+  const updatedLoan = await prisma.loan.update({
+    where: { id: loanId },
+    data: {
+      dueDate: newDueDate,
+      renewalCount: loan.renewalCount + 1,
+    },
+  });
+
+  return {
+    id: updatedLoan.id,
+    dueDate: formatDateTime(updatedLoan.dueDate),
+    renewalCount: updatedLoan.renewalCount,
+  };
+}
+
 module.exports = {
   getCurrentLoans,
   createLoan,
   getHistoryLoans,
+  renewLoan,
 };
