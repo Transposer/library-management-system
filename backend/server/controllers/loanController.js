@@ -43,9 +43,21 @@ async function renewLoan(req, res, next) {
     next(error);
   }
 }
+
+async function returnLoan(req, res, next) {
+  try {
+    const { id } = req.params;
+    const data = await loanService.returnLoan(req.currentUser.id, id);
+    sendSuccess(res, data, "归还成功");
+  } catch (error) {
+    next(error);
+  }
+}
+
 module.exports = {
   getCurrentLoans,
   createLoan,
   getHistoryLoans,
   renewLoan,
+  returnLoan,
 };

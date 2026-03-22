@@ -144,6 +144,7 @@ async function main() {
   });
   assert.equal(borrowResult.response.status, 200);
   assert.equal(borrowResult.body.message, "借阅成功");
+  const loanId = borrowResult.body.data.loanId;
 
   const borrowedBook = await prisma.book.findUnique({
     where: { id: testBookId },
@@ -162,6 +163,23 @@ async function main() {
       (loan) => loan.bookId === testBookId && loan.status === "Borrowing",
     ),
   );
+
+  const returnResult = await request(`/api/loans/${loanId}/return`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${authToken}`,
+    },
+  });
+  assert.equal(returnResult.response.status, 200);
+  assert.equal(returnResult.body.message, "归还成功");
+  assert.equal(returnResult.body.data.status, "Returned");
+  assert.equal(returnResult.body.data.bookId, testBookId);
+
+  const returnedBook = await prisma.book.findUnique({
+    where: { id: testBookId },
+  });
+  assert.equal(returnedBook.availableCopies, 1);
+  assert.equal(returnedBook.available, true);
 
   const logoutResult = await request("/api/logout", {
     method: "POST",

@@ -229,9 +229,77 @@ async function renewLoan(userId, loanId) {
   };
 }
 
+async function returnLoan(userId, loanId) {
+  const loan = await prisma.loan.findUnique({
+    where: { id: loanId },
+    include: {
+      book: true,
+    },
+  });
+
+  if (!loan || loan.userId !== userId) {
+    throw new AppError(404, "借阅记录不存在或非当前用户");
+  }
+
+  if (loan.status === "Returned" || loan.returnDate) {
+    throw new AppError(400, "该借阅记录已归还");
+  }
+
+  if (!loan.book) {
+    throw new AppError(404, "图书不存在");
+  }
+
+  const now = new Date();
+  const overdueDays = loan.dueDate < now ? Math.ceil((now - loan.dueDate) / (24 * 60 * 60 * 1000)) : 0;
+
+  const fineRateConfig = await prisma.config.findUnique({
+    where: { key: "FINE_RATE_PER_DAY" },
+  });
+
+  const fineRate = fineRateConfig ? Number(fineRateConfig.value) : 0;
+  const fineAmount = overdueDays > 0 ? overdueDays * fineRate : 0;
+
+  const updatedLoan = await prisma.$transaction(async (tx) => {
+    const returnedLoan = await tx.loan.update({
+      where: { id: loanId },
+      data: {
+        returnDate: now,
+        status: "Returned",
+        fineAmount,
+        finePaid: fineAmount === 0,
+      },
+      include: {
+        book: true,
+      },
+    });
+
+    const nextAvailableCopies = returnedLoan.book.availableCopies + 1;
+
+    await tx.book.update({
+      where: { id: returnedLoan.bookId },
+      data: {
+        availableCopies: nextAvailableCopies,
+        available: true,
+      },
+    });
+
+    return returnedLoan;
+  });
+
+  return {
+    id: updatedLoan.id,
+    bookId: updatedLoan.bookId,
+    bookTitle: updatedLoan.book.title,
+    returnDate: formatDateTime(updatedLoan.returnDate),
+    status: updatedLoan.status,
+    fineAmount: Number(updatedLoan.fineAmount),
+  };
+}
+
 module.exports = {
   getCurrentLoans,
   createLoan,
   getHistoryLoans,
   renewLoan,
+  returnLoan,
 };

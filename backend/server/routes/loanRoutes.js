@@ -9,5 +9,6 @@ router.get("/loans/current", requireAuth, loanController.getCurrentLoans);
 router.get("/loans/history", requireAuth, loanController.getHistoryLoans);
 router.post("/loans", requireAuth, loanController.createLoan);
 router.post("/loans/:id/renew", requireAuth, loanController.renewLoan);
+router.post("/loans/:id/return", requireAuth, loanController.returnLoan);
 
 module.exports = router;
