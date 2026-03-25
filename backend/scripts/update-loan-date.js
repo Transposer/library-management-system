@@ -1,16 +1,33 @@
 const prisma = require("../server/db/prisma");
 
 async function main() {
-  const id = "cmn4kb9hx0000ivvnn7jndmw1";
+  const [, , loanId, dueDateInput] = process.argv;
 
-  await prisma.loan.update({
-    where: { id },
+  if (!loanId || !dueDateInput) {
+    throw new Error(
+      "Usage: node scripts/update-loan-date.js <loanId> <dueDateISO>",
+    );
+  }
+
+  const dueDate = new Date(dueDateInput);
+  if (Number.isNaN(dueDate.getTime())) {
+    throw new Error("dueDateISO must be a valid date string");
+  }
+
+  const updatedLoan = await prisma.loan.update({
+    where: { id: loanId },
     data: {
-      dueDate: new Date("2026-02-22T10:04:14.350Z"),
+      dueDate,
+    },
+    select: {
+      id: true,
+      dueDate: true,
+      status: true,
+      returnDate: true,
     },
   });
 
-  console.log("updated");
+  console.log(JSON.stringify(updatedLoan, null, 2));
 }
 
 main()

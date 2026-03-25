@@ -5,6 +5,26 @@ const { formatDateTime, addDays } = require("../utils/date");
 const DEFAULT_LOAN_DAYS = 30;
 const OVERDUE_FINE_AMOUNT = 5;
 
+async function syncOverdueLoansForUser(userId) {
+  const now = new Date();
+
+  await prisma.loan.updateMany({
+    where: {
+      userId,
+      status: "Borrowing",
+      returnDate: null,
+      dueDate: { lt: now },
+    },
+    data: {
+      status: "Overdue",
+    },
+  });
+}
+/**
+ * 返回当前借阅
+ * @param {} loan 
+ * @returns 
+ */
 function toCurrentLoan(loan) {
   return {
     id: loan.id,
@@ -17,7 +37,11 @@ function toCurrentLoan(loan) {
     status: loan.status,
   };
 }
-
+/**
+ * 返回历史借阅
+ * @param {} loan 
+ * @returns 
+ */
 function toHistoryLoan(loan) {
   return {
     id: loan.id,
@@ -34,11 +58,33 @@ function toHistoryLoan(loan) {
   };
 }
 
+async function ensureNoUnpaidFines(
+  userId,
+  message = "该书当前不可借或您有未缴清罚款",
+) {
+  const unpaidFineLoan = await prisma.loan.findFirst({
+    where: {
+      userId,
+      fineAmount: { gt: 0 },
+      finePaid: false,
+      fineForgiven: false,
+    },
+  });
+
+  if (unpaidFineLoan) {
+    throw new AppError(400, message);
+  }
+}
+
 async function getCurrentLoans(userId) {
+  await syncOverdueLoansForUser(userId);
+
   const loans = await prisma.loan.findMany({
     where: {
       userId,
-      status: "Borrowing",
+      status: {
+        in: ["Borrowing", "Overdue"],
+      },
     },
     include: {
       book: true,
@@ -54,6 +100,8 @@ async function getCurrentLoans(userId) {
 }
 
 async function getHistoryLoans(userId, page = 1, size = 10) {
+  await syncOverdueLoansForUser(userId);
+
   const skip = (page - 1) * size;
   
   const [loans, totalCount] = await Promise.all([
@@ -101,18 +149,7 @@ async function ensureBorrowAllowed(userId, bookId) {
     throw new AppError(400, "该书当前不可借或您有未缴清罚款");
   }
 
-  const unpaidFineLoan = await prisma.loan.findFirst({
-    where: {
-      userId,
-      fineAmount: { gt: 0 },
-      finePaid: false,
-      fineForgiven: false,
-    },
-  });
-
-  if (unpaidFineLoan) {
-    throw new AppError(400, "该书当前不可借或您有未缴清罚款");
-  }
+  await ensureNoUnpaidFines(userId);
 
   return book;
 }
@@ -181,7 +218,7 @@ async function renewLoan(userId, loanId) {
     throw new AppError(404, "借阅记录不存在或非当前用户");
   }
 
-  if (loan.status !== "Borrowing") {
+  if (loan.status === "Returned") {
     throw new AppError(400, "仅借阅中的图书可续借");
   }
 
@@ -190,9 +227,15 @@ async function renewLoan(userId, loanId) {
   }
 
   const now = new Date();
-  if (loan.dueDate < now) {
+  if (loan.status === "Overdue" || loan.dueDate < now) {
     throw new AppError(400, "已逾期的图书不可续借");
   }
+
+  if (loan.status !== "Borrowing") {
+    throw new AppError(400, "仅借阅中的图书可续借");
+  }
+
+  await ensureNoUnpaidFines(userId, "您有未缴清罚款，不可续借");
 
   const otherHold = await prisma.hold.findFirst({
     where: {
@@ -340,5 +383,6 @@ module.exports = {
   getHistoryLoans,
   renewLoan,
   returnLoan,
+  payFine,
   payFine,
 };
