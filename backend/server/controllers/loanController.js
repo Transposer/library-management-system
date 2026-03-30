@@ -54,10 +54,21 @@ async function returnLoan(req, res, next) {
   }
 }
 
+async function payFine(req, res, next) {
+  try {
+    const { id } = req.params;
+    const data = await loanService.payFine(req.currentUser.id, id, req.body);
+    sendSuccess(res, data, "罚款已缴纳");
+  } catch (error) {
+    next(error);
+  }
+}
+
 module.exports = {
   getCurrentLoans,
   createLoan,
   getHistoryLoans,
   renewLoan,
   returnLoan,
+  payFine,
 };
