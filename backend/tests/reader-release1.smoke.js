@@ -224,6 +224,38 @@ async function main() {
     ),
   );
 
+  const overdueDate = new Date(Date.now() - 2 * 24 * 60 * 60 * 1000);
+  await prisma.loan.update({
+    where: { id: loanId },
+    data: {
+      dueDate: overdueDate,
+    },
+  });
+
+  const overdueCurrentLoansResult = await request("/api/loans/current", {
+    headers: {
+      Authorization: `Bearer ${authToken}`,
+    },
+  });
+  assert.equal(overdueCurrentLoansResult.response.status, 200);
+  assert.ok(
+    overdueCurrentLoansResult.body.data.list.some(
+      (loan) => loan.bookId === testBookId && loan.status === "Overdue",
+    ),
+  );
+
+  const overdueHistoryLoansResult = await request("/api/loans/history", {
+    headers: {
+      Authorization: `Bearer ${authToken}`,
+    },
+  });
+  assert.equal(overdueHistoryLoansResult.response.status, 200);
+  assert.ok(
+    overdueHistoryLoansResult.body.data.list.some(
+      (loan) => loan.id === loanId && loan.status === "Overdue",
+    ),
+  );
+
   const returnResult = await request(`/api/loans/${loanId}/return`, {
     method: "POST",
     headers: {

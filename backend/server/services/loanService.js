@@ -203,6 +203,8 @@ async function createLoan(userId, payload) {
 }
 
 async function renewLoan(userId, loanId) {
+  await syncOverdueLoansForUser(userId);
+
   const loan = await prisma.loan.findUnique({
     where: { id: loanId },
     include: {
@@ -218,7 +220,7 @@ async function renewLoan(userId, loanId) {
     throw new AppError(404, "借阅记录不存在或非当前用户");
   }
 
-  if (loan.status === "Returned") {
+  if (!["Borrowing", "Overdue"].includes(loan.status)) {
     throw new AppError(400, "仅借阅中的图书可续借");
   }
 
