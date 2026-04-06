@@ -9,6 +9,7 @@ const wishlistRoutes = require("./wishlistRoutes");
 const ratingRoutes = require("./ratingRoutes");  // 评分路由
 const adminUserRoutes = require("./adminUserRoutes");
 const adminRoutes = require("./adminRoutes");
+const announcementRoutes = require("./announcementRoutes");  // 公告路由
 
 const router = express.Router();
 
@@ -21,5 +22,6 @@ router.use(userRoutes);
 router.use(wishlistRoutes);
 router.use(ratingRoutes);
 router.use(adminUserRoutes);
+router.use(announcementRoutes);
 
 module.exports = router;
