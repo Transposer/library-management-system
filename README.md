@@ -1,2 +1,2 @@
 # library-management-system
-Week 1-12 Software PM Course Project
+每次拉取代码不会自动拉取 dev.db 文件，因为 dev.db 不在 Git 里。
