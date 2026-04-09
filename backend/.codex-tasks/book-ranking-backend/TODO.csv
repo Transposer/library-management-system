@@ -1,5 +1,0 @@
-id,task,status,acceptance_criteria,validation_command,completed_at,retry_count,notes
-1,梳理现有排行榜实现与需求差异,DONE,差异点已记录到SPEC或PROGRESS,rg -n "getRanking|ranking" server/services server/controllers server/routes,2026-04-09,0,
-2,确定后端接口契约与时间范围口径,DONE,接口参数和返回字段定义清晰,cat .codex-tasks/book-ranking-backend/SPEC.md,2026-04-09,0,
-3,调整后端统计实现,DONE,service/controller/route按契约更新,rg -n "getRanking|ranking" server/services server/controllers server/routes,2026-04-09,0,
-4,补充或更新后端验证,DONE,对应测试或校验方式已写明,timeout 60s node tests/book-ranking.smoke.js,2026-04-09,0,

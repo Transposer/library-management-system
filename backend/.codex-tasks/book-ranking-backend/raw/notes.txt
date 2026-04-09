@@ -1,8 +1,0 @@
-Current code already has a ranking endpoint scaffold:
-- service: server/services/bookService.js:getRanking
-- route: server/routes/bookRoutes.js
-- controller: server/controllers/bookController.js
-
-Known mismatch:
-- current implementation uses period=week|month semantics
-- requirement needs month / 3 months / year
