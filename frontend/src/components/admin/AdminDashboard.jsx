@@ -1,6 +1,8 @@
-import React from 'react'
+import { useState } from 'react'
+import CreateLibrarian from './CreateLibrarian'
 
 const AdminDashboard = ({ user, stats, books, currentPage, setCurrentPage }) => {
+  const [currentView, setCurrentView] = useState('dashboard')
   const renderDashboard = () => (
     <div className="content">
       <div className="welcome-banner">
@@ -47,6 +49,7 @@ const AdminDashboard = ({ user, stats, books, currentPage, setCurrentPage }) => 
         <div className="quick-actions-grid">
           <button className="quick-action-btn blue" onClick={() => setCurrentPage('books')}>🔍 Search Books</button>
           <button className="quick-action-btn green" onClick={() => setCurrentPage('users')}>👥 User Management</button>
+          <button className="quick-action-btn purple" onClick={() => setCurrentView('create-librarian')}>➕ Create Librarian</button>
           <button className="quick-action-btn orange" onClick={() => setCurrentPage('manage')}>⚙️ Book Management</button>
           <button className="quick-action-btn gray" onClick={() => setCurrentPage('settings')}>⚙️ System Settings</button>
         </div>
@@ -197,17 +200,22 @@ const AdminDashboard = ({ user, stats, books, currentPage, setCurrentPage }) => 
     </div>
   )
 
-  switch (currentPage) {
-    case 'dashboard':
-      return renderDashboard()
-    case 'books':
-      return renderBooks()
-    case 'users':
-      return renderUserManagement()
-    case 'settings':
-      return renderSystemSettings()
+  switch (currentView) {
+    case 'create-librarian':
+      return <CreateLibrarian onBack={() => setCurrentView('dashboard')} />
     default:
-      return <div className="content"><div className="page-header"><h2>Under development...</h2></div></div>
+      switch (currentPage) {
+        case 'dashboard':
+          return renderDashboard()
+        case 'books':
+          return renderBooks()
+        case 'users':
+          return renderUserManagement()
+        case 'settings':
+          return renderSystemSettings()
+        default:
+          return <div className="content"><div className="page-header"><h2>Under development...</h2></div></div>
+      }
   }
 }
 
