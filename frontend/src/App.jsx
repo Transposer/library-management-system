@@ -138,6 +138,18 @@ function App() {
               <span className="icon">📋</span>
               <span>My Loans</span>
             </div>
+            <div className={`menu-item ${currentPage === 'holds' ? 'active' : ''}`} onClick={() => setCurrentPage('holds')}>
+              <span className="icon">⏳</span>
+              <span>My Holds</span>
+            </div>
+            <div className={`menu-item ${currentPage === 'wishlist' ? 'active' : ''}`} onClick={() => setCurrentPage('wishlist')}>
+              <span className="icon">❤️</span>
+              <span>Wishlist</span>
+            </div>
+            <div className={`menu-item ${currentPage === 'fines' ? 'active' : ''}`} onClick={() => setCurrentPage('fines')}>
+              <span className="icon">💰</span>
+              <span>Pay Fines</span>
+            </div>
             <div className={`menu-item ${currentPage === 'profile' ? 'active' : ''}`} onClick={() => setCurrentPage('profile')}>
               <span className="icon">👤</span>
               <span>My Profile</span>
@@ -261,6 +273,9 @@ function getPageName(page) {
     'dashboard': 'Dashboard',
     'books': 'Books',
     'loans': 'My Loans',
+    'holds': 'My Holds',
+    'wishlist': 'Wishlist',
+    'fines': 'Pay Fines',
     'profile': 'My Profile',
     'manage': 'Manage Books',
     'loans-manage': 'Loan Management'

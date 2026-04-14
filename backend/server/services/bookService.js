@@ -147,6 +147,24 @@ async function getBookDetail(bookId) {
 }
 
 // Added book list retrieval with filtering, sorting, and pagination.
+function normalizeBookLanguage(language) {
+  if (!language || typeof language !== 'string') {
+    return null;
+  }
+
+  const normalized = language.trim().toLowerCase();
+  if (['english', 'en'].includes(normalized)) {
+    return 'English';
+  }
+  if (['chinese', 'zh', '中文'].includes(normalized)) {
+    return 'Chinese';
+  }
+  if (['spanish', 'french', 'others', 'other'].includes(normalized)) {
+    return 'Others';
+  }
+  return null;
+}
+
 async function getBooksWithFilters(query) {
   const page = Number(query.page || 1);
   const size = Number(query.size || 10);
@@ -175,7 +193,11 @@ async function getBooksWithFilters(query) {
   
   // Language filter.
   if (query.language) {
-    where.language = query.language;
+    const normalizedLanguage = normalizeBookLanguage(query.language);
+    if (!normalizedLanguage) {
+      throw new AppError(400, "Invalid language filter");
+    }
+    where.language = normalizedLanguage;
   }
   
   // Availability filter.

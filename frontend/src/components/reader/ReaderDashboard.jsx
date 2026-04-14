@@ -583,17 +583,6 @@ const ReaderDashboard = ({ user, stats, books, loans, currentPage, setCurrentPag
         </div>
       </div>
 
-      <div className="quick-actions">
-        <h3>Quick Actions</h3>
-        <div className="quick-actions-grid">
-          <button className="quick-action-btn blue" onClick={() => setCurrentPage('books')}>🔍 Search Books</button>
-          <button className="quick-action-btn green" onClick={() => setCurrentPage('loans')}>📋 Loan History</button>
-          <button className="quick-action-btn orange" onClick={() => setCurrentPage('holds')}>⏳ My Holds</button>
-          <button className="quick-action-btn purple" onClick={() => setCurrentPage('wishlist')}>❤️ Wishlist</button>
-          <button className="quick-action-btn red" onClick={() => setCurrentPage('fines')}>💰 Pay Fines</button>
-          <button className="quick-action-btn gray" onClick={() => setCurrentPage('profile')}>👤 My Profile</button>
-        </div>
-      </div>
 
       <div className="table-section">
         <h3>Recently Added Books</h3>
@@ -708,7 +697,7 @@ const ReaderDashboard = ({ user, stats, books, loans, currentPage, setCurrentPag
 
       {/* Book Detail Modal */}
       {bookDetail && selectedBook && (
-        <div className="modal-overlay" onClick={() => { setSelectedBook(null); setBookDetail(null); }}>
+        <div className="modal-overlay book-detail-modal" onClick={() => { setSelectedBook(null); setBookDetail(null); }}>
           <div className="modal-content" onClick={(e) => e.stopPropagation()}>
             <button className="modal-close" onClick={() => { setSelectedBook(null); setBookDetail(null); }}>×</button>
             <div className="book-detail">
@@ -1122,21 +1111,23 @@ const ReaderDashboard = ({ user, stats, books, loans, currentPage, setCurrentPag
                     </td>
                     <td>{new Date(item.createdAt).toLocaleDateString('en-US')}</td>
                     <td>
-                      <button
-                        className="action-btn remove-btn"
-                        onClick={() => handleRemoveFromWishlist(item.id)}
-                      >
-                        Remove
-                      </button>
-                      {item.available && (
+                      <div className="wishlist-actions">
+                        {item.available && (
+                          <button
+                            className="action-btn borrow-btn"
+                            onClick={() => handleBorrow(item.bookId)}
+                            disabled={borrowLoading}
+                          >
+                            {borrowLoading ? 'Borrowing...' : 'Borrow'}
+                          </button>
+                        )}
                         <button
-                          className="action-btn borrow-btn"
-                          onClick={() => handleBorrow(item.bookId)}
-                          disabled={borrowLoading}
+                          className="action-btn remove-btn"
+                          onClick={() => handleRemoveFromWishlist(item.id)}
                         >
-                          {borrowLoading ? 'Borrowing...' : 'Borrow'}
+                          Remove
                         </button>
-                      )}
+                      </div>
                     </td>
                   </tr>
                 ))
