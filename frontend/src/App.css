@@ -503,11 +503,6 @@ body {
   letter-spacing: 0.5px;
 }
 
-.data-table td {
-  font-size: 14px;
-  color: #4a5568;
-}
-
 .data-table tbody tr:hover {
   background: #f7fafc;
 }
@@ -1278,6 +1273,47 @@ body {
 
 .btn-sm.danger:hover {
   background: #f56565;
+}
+
+.user-manage-actions {
+  display: grid;
+  grid-template-columns: 50px 82px 108px 56px;
+  gap: 6px;
+  align-items: center;
+  justify-content: flex-end;
+  width: fit-content;
+  margin-left: auto;
+}
+
+.user-manage-actions .btn-sm {
+  width: 100%;
+  margin-right: 0;
+  padding: 6px 8px;
+  white-space: nowrap;
+  text-align: center;
+}
+
+.user-manage-action-edit {
+  background: #667eea;
+  font-weight: 600;
+}
+
+.user-manage-action-edit:hover:not(:disabled) {
+  background: #5a67d8;
+}
+
+.user-manage-action-placeholder {
+  display: block;
+  height: 30px;
+}
+
+/* User Manage table specific styles */
+.content > .table-section:has(.data-table .user-manage-action-edit) {
+  --actions-col-width: 316px;
+}
+
+.content > .table-section:has(.data-table .user-manage-action-edit) .data-table th:last-child {
+  text-align: right;
 }
 
 /* Success and Error Messages */

@@ -38,6 +38,15 @@ export function useUsers() {
     await load()
   }
 
+  const deleteUser = async (id) => {
+    await adminApi.deleteUser(id)
+    if (data.list.length === 1 && query.page > 1) {
+      setQuery((prev) => ({ ...prev, page: prev.page - 1 }))
+      return
+    }
+    await load()
+  }
+
   const resetPassword = async (id, newPassword) => {
     return adminApi.resetUserPassword(id, newPassword)
   }
@@ -50,6 +59,7 @@ export function useUsers() {
     setKeyword,
     setPage,
     updateRole,
+    deleteUser,
     resetPassword,
     reload: load
   }

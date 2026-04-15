@@ -1,7 +1,6 @@
 export const ADMIN_PAGES = {
   OVERVIEW: 'overview',
-  LIBRARIANS: 'librarians',
-  USERS: 'users'
+  USER_MANAGE: 'user-manage'
 }
 
 export const ROLE_OPTIONS = ['STUDENT', 'LIBRARIAN', 'ADMIN']

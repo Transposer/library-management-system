@@ -1,14 +1,12 @@
 import { useEffect, useMemo, useState } from 'react'
 import AdminMessageBar from './components/AdminMessageBar'
 import { ADMIN_PAGES } from './constants'
-import LibrarianManagement from './pages/LibrarianManagement'
 import AdminOverview from './pages/AdminOverview'
-import UserRoleManagement from './pages/UserRoleManagement'
+import UserManagement from './pages/UserManagement'
 
 const PAGE_NAME = {
   [ADMIN_PAGES.OVERVIEW]: 'Overview',
-  [ADMIN_PAGES.LIBRARIANS]: 'Librarian Management',
-  [ADMIN_PAGES.USERS]: 'User Role Management'
+  [ADMIN_PAGES.USER_MANAGE]: 'User Manage'
 }
 
 const AdminDashboard = ({ user, handleLogout, getRoleName }) => {
@@ -27,10 +25,8 @@ const AdminDashboard = ({ user, handleLogout, getRoleName }) => {
 
   const renderPage = () => {
     switch (currentPage) {
-      case ADMIN_PAGES.LIBRARIANS:
-        return <LibrarianManagement onNotify={notify} />
-      case ADMIN_PAGES.USERS:
-        return <UserRoleManagement currentUserId={currentUserId} onNotify={notify} />
+      case ADMIN_PAGES.USER_MANAGE:
+        return <UserManagement currentUserId={currentUserId} onNotify={notify} />
       case ADMIN_PAGES.OVERVIEW:
       default:
         return <AdminOverview user={user} onNavigate={setCurrentPage} />
@@ -46,13 +42,9 @@ const AdminDashboard = ({ user, handleLogout, getRoleName }) => {
             <span className="icon">🏠</span>
             <span>Overview</span>
           </div>
-          <div className={`menu-item ${currentPage === ADMIN_PAGES.LIBRARIANS ? 'active' : ''}`} onClick={() => setCurrentPage(ADMIN_PAGES.LIBRARIANS)}>
-            <span className="icon">👔</span>
-            <span>Librarians</span>
-          </div>
-          <div className={`menu-item ${currentPage === ADMIN_PAGES.USERS ? 'active' : ''}`} onClick={() => setCurrentPage(ADMIN_PAGES.USERS)}>
+          <div className={`menu-item ${currentPage === ADMIN_PAGES.USER_MANAGE ? 'active' : ''}`} onClick={() => setCurrentPage(ADMIN_PAGES.USER_MANAGE)}>
             <span className="icon">🧩</span>
-            <span>Roles & Password</span>
+            <span>User Manage</span>
           </div>
         </nav>
         <div className="user-info">

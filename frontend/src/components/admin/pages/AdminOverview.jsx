@@ -85,9 +85,7 @@ const AdminOverview = ({ user, onNavigate }) => {
       <div className="quick-actions">
         <h3>Quick Actions</h3>
         <div className="quick-actions-grid">
-          <button className="quick-action-btn blue" onClick={() => onNavigate(ADMIN_PAGES.LIBRARIANS)}>👔 Manage Librarians</button>
-          <button className="quick-action-btn green" onClick={() => onNavigate(ADMIN_PAGES.USERS)}>🧩 Manage Roles</button>
-          <button className="quick-action-btn orange" onClick={() => onNavigate(ADMIN_PAGES.USERS)}>🔑 Reset Password</button>
+          <button className="quick-action-btn green" onClick={() => onNavigate(ADMIN_PAGES.USER_MANAGE)}>🧩 Users Manage</button>
           <button className="quick-action-btn gray" onClick={() => onNavigate(ADMIN_PAGES.OVERVIEW)}>🏠 Back to Overview</button>
         </div>
       </div>

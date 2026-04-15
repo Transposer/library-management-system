@@ -79,6 +79,18 @@ async function listUsers(req, res, next) {
   }
 }
 
+async function deleteUser(req, res, next) {
+  try {
+    const operatorId = req.currentUser ? req.currentUser.id : null;
+    const targetUserId = req.params.id;
+
+    const data = await adminUserService.deleteUser(operatorId, targetUserId);
+    sendSuccess(res, data, "用户删除成功");
+  } catch (error) {
+    next(error);
+  }
+}
+
 async function updateUserRole(req, res, next) {
   try {
     const operatorId = req.currentUser ? req.currentUser.id : null;
@@ -99,6 +111,7 @@ module.exports = {
   updateLibrarian,
   deleteLibrarian,
   listUsers,
+  deleteUser,
   updateUserRole,
   resetUserPassword,
 };

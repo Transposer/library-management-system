@@ -43,6 +43,7 @@ export const adminApi = {
   deleteLibrarian: (id) => request(`/librarians/${id}`, { method: 'DELETE' }),
 
   listUsers: (params) => request(`/users${qs(params)}`),
+  deleteUser: (id) => request(`/users/${id}`, { method: 'DELETE' }),
   updateUserRole: (id, role) => request(`/users/${id}/role`, {
     method: 'PUT',
     body: JSON.stringify({ role })

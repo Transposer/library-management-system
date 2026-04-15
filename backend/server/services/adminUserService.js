@@ -239,6 +239,56 @@ async function listUsers(query) {
   };
 }
 
+async function deleteUser(operatorId, targetUserId) {
+  if (!operatorId || !targetUserId) {
+    throw new AppError(400, "参数错误");
+  }
+
+  if (operatorId === targetUserId) {
+    throw new AppError(400, "禁止删除自己");
+  }
+
+  const operator = await prisma.user.findUnique({
+    where: { id: operatorId },
+  });
+
+  if (!operator) {
+    throw new AppError(404, "操作人不存在");
+  }
+
+  if (operator.role !== "ADMIN") {
+    throw new AppError(403, "无权限执行此操作");
+  }
+
+  const targetUser = await prisma.user.findUnique({
+    where: { id: targetUserId },
+  });
+
+  if (!targetUser) {
+    throw new AppError(404, "用户不存在");
+  }
+
+  if (targetUser.role === "LIBRARIAN") {
+    throw new AppError(400, "馆员账号请在馆员管理中删除");
+  }
+
+  if (targetUser.role === "ADMIN") {
+    const adminCount = await prisma.user.count({
+      where: { role: "ADMIN" },
+    });
+
+    if (adminCount <= 1) {
+      throw new AppError(400, "系统至少保留一个管理员");
+    }
+  }
+
+  await prisma.user.delete({
+    where: { id: targetUserId },
+  });
+
+  return null;
+}
+
 async function updateUserRole(operatorId, targetUserId, role) {
   if (!operatorId || !targetUserId || !role) {
     throw new AppError(400, "参数错误");
@@ -354,6 +404,7 @@ module.exports = {
   updateLibrarian,
   deleteLibrarian,
   listUsers,
+  deleteUser,
   updateUserRole,
   resetUserPassword,
 };
