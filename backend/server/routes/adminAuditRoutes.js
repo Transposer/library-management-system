@@ -5,7 +5,7 @@ const { requireRole } = require("../middleware/role");
 
 const router = express.Router();
 
-router.get("/audit-logs", 
+router.get("/admin/audit-logs",
   requireAuth,
   requireRole("ADMIN"),
   adminAuditController.listAuditLogs
