@@ -350,6 +350,10 @@ const ReaderDashboard = ({ user, stats, books, loans, currentPage, setCurrentPag
     if (currentPage === 'ranking') fetchRankings(rankingPeriod);
   }, [currentPage]);
 
+  useEffect(() => {
+    if (currentPage === 'fines') fetchFines();
+  }, [currentPage]);
+
   // Show message
   const showMessage = (type, text) => {
     setMessage({ type, text })
@@ -1529,10 +1533,6 @@ const ReaderDashboard = ({ user, stats, books, loans, currentPage, setCurrentPag
 
   // Render Fines (7.1)
   const renderFines = () => {
-    if (!fines.length && !finesLoading) {
-      fetchFines()
-    }
-
     return (
       <div className="content">
         <div className="page-header">
