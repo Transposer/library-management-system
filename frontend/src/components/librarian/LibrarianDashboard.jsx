@@ -2,6 +2,22 @@ import React, { useEffect, useState } from 'react'
 
 const API_BASE = '/api/librarian'
 const DEFAULT_STATS = { totalBooks: 0, availableBooks: 0, myLoans: 0, pendingHolds: 0 }
+const DEFAULT_FINE_DASHBOARD = {
+  totalBooks: 0,
+  booksInLibrary: 0,
+  checkedOutBooks: 0,
+  overdueBooks: 0,
+  unpaidFineTotal: 0,
+  paidFineTotal: 0,
+  paidThisWeek: 0,
+  paidThisYear: 0,
+  fineDueToday: 0,
+  fineItemCount: 0,
+  fineItems: [],
+  paidFineItemCount: 0,
+  paidFineItems: [],
+  generatedAt: ''
+}
 const GENRES = ['Technology', 'Fiction', 'Science', 'History', 'Management']
 const LANGUAGES = ['Chinese', 'English', 'Others']
 const HOLD_STATUSES = ['WAITING', 'READY', 'CANCELLED']
@@ -12,6 +28,129 @@ const formatDateLabel = (value) => {
 }
 
 const formatMoney = (value) => `$${Number(value || 0).toFixed(2)}`
+
+const CODE39_PATTERNS = {
+  '0': 'nnnwwnwnn',
+  '1': 'wnnwnnnnw',
+  '2': 'nnwwnnnnw',
+  '3': 'wnwwnnnnn',
+  '4': 'nnnwwnnnw',
+  '5': 'wnnwwnnnn',
+  '6': 'nnwwwnnnn',
+  '7': 'nnnwnnwnw',
+  '8': 'wnnwnnwnn',
+  '9': 'nnwwnnwnn',
+  A: 'wnnnnwnnw',
+  B: 'nnwnnwnnw',
+  C: 'wnwnnwnnn',
+  D: 'nnnnwwnnw',
+  E: 'wnnnwwnnn',
+  F: 'nnwnwwnnn',
+  G: 'nnnnnwwnw',
+  H: 'wnnnnwwnn',
+  I: 'nnwnnwwnn',
+  J: 'nnnnwwwnn',
+  K: 'wnnnnnnww',
+  L: 'nnwnnnnww',
+  M: 'wnwnnnnwn',
+  N: 'nnnnwnnww',
+  O: 'wnnnwnnwn',
+  P: 'nnwnwnnwn',
+  Q: 'nnnnnnwww',
+  R: 'wnnnnnwwn',
+  S: 'nnwnnnwwn',
+  T: 'nnnnwnwwn',
+  U: 'wwnnnnnnw',
+  V: 'nwwnnnnnw',
+  W: 'wwwnnnnnn',
+  X: 'nwnnwnnnw',
+  Y: 'wwnnwnnnn',
+  Z: 'nwwnwnnnn',
+  '-': 'nwnnnnwnw',
+  '.': 'wwnnnnwnn',
+  ' ': 'nwwnnnwnn',
+  '$': 'nwnwnwnnn',
+  '/': 'nwnwnnnwn',
+  '+': 'nwnnnwnwn',
+  '%': 'nnnwnwnwn',
+  '*': 'nwnnwnwnn'
+}
+
+const normalizeCode39Value = (value) =>
+  String(value || '')
+    .toUpperCase()
+    .split('')
+    .filter((char) => CODE39_PATTERNS[char])
+    .join('')
+
+const buildCode39Bars = (value) => {
+  const narrow = 2
+  const wide = 5
+  const gap = narrow
+  const quietZone = 10
+  const encoded = `*${normalizeCode39Value(value)}*`
+  const bars = []
+  let x = quietZone
+
+  encoded.split('').forEach((char) => {
+    const pattern = CODE39_PATTERNS[char]
+    if (!pattern) return
+
+    pattern.split('').forEach((widthCode, index) => {
+      const width = widthCode === 'w' ? wide : narrow
+      if (index % 2 === 0) {
+        bars.push({ x, width })
+      }
+      x += width
+    })
+    x += gap
+  })
+
+  return { bars, width: x + quietZone }
+}
+
+const CopyBarcode = ({ value }) => {
+  const { bars, width } = buildCode39Bars(value)
+
+  return (
+    <svg
+      className="copy-barcode-svg"
+      viewBox={`0 0 ${width} 92`}
+      role="img"
+      aria-label={`Barcode ${value}`}
+      preserveAspectRatio="xMidYMid meet"
+    >
+      <rect width={width} height="92" fill="#ffffff" />
+      {bars.map((bar, index) => (
+        <rect key={`${bar.x}-${index}`} x={bar.x} y="8" width={bar.width} height="58" fill="#111827" />
+      ))}
+      <text x={width / 2} y="82" textAnchor="middle">
+        {value}
+      </text>
+    </svg>
+  )
+}
+
+const getBookDisplayStatus = (book) => {
+  if (book?.displayStatus) return book.displayStatus
+  if (book?.available && Number(book?.availableCopies || 0) > 0) return 'AVAILABLE'
+  if (Number(book?.borrowedCopies || 0) > 0) return 'BORROWED'
+  return 'UNAVAILABLE'
+}
+
+const getBookStatusLabel = (book) => {
+  const status = getBookDisplayStatus(book)
+  if (status === 'BORROWED') return 'Borrowed'
+  if (status === 'AVAILABLE') return 'Available'
+  return 'Unavailable'
+}
+
+const getBookStatusBadgeClass = (book) => {
+  const status = getBookDisplayStatus(book)
+  if (status === 'BORROWED') return 'warning'
+  if (status === 'AVAILABLE') return 'success'
+  return 'danger'
+}
 
 const LibrarianDashboard = ({
   user,
@@ -32,12 +171,20 @@ const LibrarianDashboard = ({
   const [loading, setLoading] = useState(false)
   const [loanLoading, setLoanLoading] = useState(false)
   const [holdLoading, setHoldLoading] = useState(false)
+  const [fineDashboardLoading, setFineDashboardLoading] = useState(false)
+  const [fineDashboard, setFineDashboard] = useState(DEFAULT_FINE_DASHBOARD)
+  const [fineDashboardView, setFineDashboardView] = useState('unpaid')
   const [checkoutLoading, setCheckoutLoading] = useState(false)
+  const [payingFineId, setPayingFineId] = useState('')
+  const [barcodeLookupLoading, setBarcodeLookupLoading] = useState(false)
+  const [barcodeBook, setBarcodeBook] = useState(null)
   const [returningLoanId, setReturningLoanId] = useState('')
   const [holdActionLoadingId, setHoldActionLoadingId] = useState('')
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
   const [searchKeyword, setSearchKeyword] = useState('')
+  const [searchType, setSearchType] = useState('all')
+  const [activeSearchTerm, setActiveSearchTerm] = useState('')
   const [searchResults, setSearchResults] = useState([])
   const [isSearching, setIsSearching] = useState(false)
   const [sortConfig, setSortConfig] = useState({ key: null, direction: 'asc' })
@@ -52,9 +199,13 @@ const LibrarianDashboard = ({
   const [showAddModal, setShowAddModal] = useState(false)
   const [showEditModal, setShowEditModal] = useState(false)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+  const [alipayTarget, setAlipayTarget] = useState(null)
+  const [alipayResult, setAlipayResult] = useState(null)
   const [returnTarget, setReturnTarget] = useState(null)
   const [readyTarget, setReadyTarget] = useState(null)
   const [cancelHoldTarget, setCancelHoldTarget] = useState(null)
+  const [copyBarcodeTarget, setCopyBarcodeTarget] = useState(null)
+  const [copyBarcodeLoadingId, setCopyBarcodeLoadingId] = useState('')
   const [expandedHoldId, setExpandedHoldId] = useState('')
   const [selectedBook, setSelectedBook] = useState(null)
   const [addForm, setAddForm] = useState({
@@ -103,7 +254,7 @@ const LibrarianDashboard = ({
     setStats(prev => ({
       ...prev,
       totalBooks: total ?? list.length,
-      availableBooks: list.filter(book => book.available).length
+      availableBooks: list.filter(book => getBookDisplayStatus(book) === 'AVAILABLE').length
     }))
   }
 
@@ -173,8 +324,47 @@ const LibrarianDashboard = ({
   const refreshLoanManagement = async (options = {}) => {
     await Promise.all([
       fetchBooks(1, 50, options),
-      fetchLoanRecords(options)
+      fetchLoanRecords(options),
+      fetchFineDashboard(options)
     ])
+  }
+
+  const fetchFineDashboard = async (options = {}) => {
+    const { silent = false } = options
+
+    if (!silent) {
+      setFineDashboardLoading(true)
+    }
+
+    try {
+      const token = getToken()
+      const res = await fetch(`${API_BASE}/fine-dashboard`, {
+        headers: { Authorization: `Bearer ${token}` }
+      })
+      const result = await res.json()
+
+      if (result.code === 200) {
+        setFineDashboard({
+          ...DEFAULT_FINE_DASHBOARD,
+          ...result.data,
+          fineItems: result.data?.fineItems || [],
+          paidFineItems: result.data?.paidFineItems || []
+        })
+        setStats(prev => ({
+          ...prev,
+          availableBooks: result.data?.booksInLibrary ?? prev.availableBooks,
+          myLoans: result.data?.checkedOutBooks ?? prev.myLoans
+        }))
+      } else {
+        notify('error', result.message || 'Failed to fetch fine dashboard')
+      }
+    } catch (err) {
+      notify('error', 'Network error: ' + err.message)
+    } finally {
+      if (!silent) {
+        setFineDashboardLoading(false)
+      }
+    }
   }
 
   const fetchHoldRecords = async (options = {}) => {
@@ -222,19 +412,26 @@ const LibrarianDashboard = ({
 
     if (!searchKeyword.trim()) {
       setSearchResults([])
+      setActiveSearchTerm('')
       return
     }
 
     setIsSearching(true)
     try {
       const token = getToken()
-      const res = await fetch(`${API_BASE}/books?keyword=${encodeURIComponent(searchKeyword.trim())}`, {
+      const params = new URLSearchParams({ keyword: searchKeyword.trim() })
+      if (searchType !== 'all') {
+        params.set('type', searchType)
+      }
+
+      const res = await fetch(`${API_BASE}/books?${params}`, {
         headers: { Authorization: `Bearer ${token}` }
       })
       const result = await res.json()
 
       if (result.code === 200) {
         setSearchResults(result.data.list || [])
+        setActiveSearchTerm(searchKeyword.trim())
       } else {
         notify('error', result.message || 'Search failed')
       }
@@ -254,6 +451,15 @@ const LibrarianDashboard = ({
 
   useEffect(() => {
     const loadPageData = async () => {
+      if (currentPage === 'dashboard') {
+        await Promise.all([
+          fetchBooks(1, 50),
+          fetchLoanRecords({ silent: true }),
+          fetchFineDashboard()
+        ])
+        return
+      }
+
       if (currentPage === 'loans-manage') {
         await refreshLoanManagement()
         return
@@ -423,6 +629,27 @@ const LibrarianDashboard = ({
     }
   }
 
+  const openCopyBarcodeModal = async (book) => {
+    setCopyBarcodeLoadingId(book.id)
+    try {
+      const token = getToken()
+      const res = await fetch(`${API_BASE}/books/${book.id}`, {
+        headers: { Authorization: `Bearer ${token}` }
+      })
+      const result = await res.json()
+
+      if (result.code === 200) {
+        setCopyBarcodeTarget(result.data)
+      } else {
+        notify('error', result.message || 'Failed to load book copies')
+      }
+    } catch (err) {
+      notify('error', 'Network error: ' + err.message)
+    } finally {
+      setCopyBarcodeLoadingId('')
+    }
+  }
+
   const resetAddForm = () => {
     setAddForm({
       title: '',
@@ -482,6 +709,7 @@ const LibrarianDashboard = ({
         )
         setCheckoutForm({ userId: '', bookIdentifier: '' })
         setCheckoutErrors({})
+        setBarcodeBook(null)
         await refreshLoanManagement({ silent: true })
       } else {
         notify('error', result.message || 'Checkout failed')
@@ -490,6 +718,94 @@ const LibrarianDashboard = ({
       notify('error', 'Network error: ' + err.message)
     } finally {
       setCheckoutLoading(false)
+    }
+  }
+
+  const handleBarcodeLookup = async () => {
+    const barcode = checkoutForm.bookIdentifier.trim()
+
+    if (!barcode) {
+      setCheckoutErrors(prev => ({ ...prev, bookIdentifier: 'Barcode or ISBN is required' }))
+      setBarcodeBook(null)
+      return
+    }
+
+    setBarcodeLookupLoading(true)
+    setCheckoutErrors(prev => ({ ...prev, bookIdentifier: '' }))
+    try {
+      const token = getToken()
+      const params = new URLSearchParams({ isbn: barcode })
+      const res = await fetch(`${API_BASE}/books/scan?${params.toString()}`, {
+        headers: { Authorization: `Bearer ${token}` }
+      })
+      const result = await res.json()
+
+      if (result.code === 200) {
+        setBarcodeBook(result.data)
+        notify('success', `Scan matched: ${result.data.title}`)
+      } else {
+        setBarcodeBook(null)
+        notify('error', result.message || 'No book matched this barcode or ISBN')
+      }
+    } catch (err) {
+      setBarcodeBook(null)
+      notify('error', 'Network error: ' + err.message)
+    } finally {
+      setBarcodeLookupLoading(false)
+    }
+  }
+
+  const openAlipayModal = (item) => {
+    setAlipayTarget(item)
+    setAlipayResult(null)
+  }
+
+  const closeAlipayModal = () => {
+    if (payingFineId) {
+      return
+    }
+
+    setAlipayTarget(null)
+    setAlipayResult(null)
+  }
+
+  const handleAlipayFine = async (e) => {
+    e.preventDefault()
+
+    if (!alipayTarget) {
+      return
+    }
+
+    setPayingFineId(alipayTarget.loanId)
+    try {
+      const token = getToken()
+      const res = await fetch(`${API_BASE}/loans/${alipayTarget.loanId}/pay-fine`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          amount: alipayTarget.fineAmount,
+          method: 'ALIPAY'
+        })
+      })
+      const result = await res.json()
+
+      if (result.code === 200) {
+        setAlipayResult(result.data)
+        notify('success', `Alipay payment received for ${alipayTarget.userName}: ${formatMoney(alipayTarget.fineAmount)}.`)
+        await Promise.all([
+          fetchFineDashboard({ silent: true }),
+          fetchLoanRecords({ silent: true })
+        ])
+      } else {
+        notify('error', result.message || 'Alipay payment failed')
+      }
+    } catch (err) {
+      notify('error', 'Network error: ' + err.message)
+    } finally {
+      setPayingFineId('')
     }
   }
 
@@ -643,8 +959,7 @@ const LibrarianDashboard = ({
       processed = processed.filter(book => book.genre === filterGenre)
     }
     if (filterStatus) {
-      const isAvailable = filterStatus === 'available'
-      processed = processed.filter(book => book.available === isAvailable)
+      processed = processed.filter(book => getBookDisplayStatus(book).toLowerCase() === filterStatus)
     }
 
     // Apply sorting
@@ -722,6 +1037,226 @@ const LibrarianDashboard = ({
     </>
   )
 
+  const getVisiblePaidFineItems = () => fineDashboard.paidFineItems.filter((item) => {
+    if (fineDashboardView === 'week') {
+      const paidAt = new Date(item.paidAt)
+      const today = new Date()
+      const start = new Date(today)
+      start.setHours(0, 0, 0, 0)
+      const day = start.getDay()
+      start.setDate(start.getDate() + (day === 0 ? -6 : 1 - day))
+      return paidAt >= start
+    }
+    if (fineDashboardView === 'year') {
+      return new Date(item.paidAt).getFullYear() === new Date().getFullYear()
+    }
+    return true
+  })
+
+  const renderFineDashboardPanel = () => (
+    <div className="fine-dashboard-panel">
+      <div className="fine-dashboard-header">
+        <div>
+          <h3>Fine Dashboard</h3>
+          <p>Track unpaid fines, paid collections, and the borrowers behind each payment.</p>
+        </div>
+        <button
+          type="button"
+          className="btn-secondary"
+          disabled={fineDashboardLoading}
+          onClick={() => fetchFineDashboard()}
+        >
+          {fineDashboardLoading ? 'Refreshing...' : 'Refresh'}
+        </button>
+      </div>
+
+      <div className="fine-summary-grid">
+        <button
+          type="button"
+          className={`fine-summary-tile ${fineDashboardView === 'unpaid' ? 'active' : ''}`}
+          onClick={() => setFineDashboardView('unpaid')}
+        >
+          <span>Unpaid Fines</span>
+          <strong>{formatMoney(fineDashboard.unpaidFineTotal ?? fineDashboard.fineDueToday)}</strong>
+          <small>{fineDashboard.fineItemCount} borrowers need follow-up</small>
+        </button>
+        <button
+          type="button"
+          className={`fine-summary-tile ${fineDashboardView === 'paid' ? 'active' : ''}`}
+          onClick={() => setFineDashboardView('paid')}
+        >
+          <span>Paid Fines</span>
+          <strong>{formatMoney(fineDashboard.paidFineTotal)}</strong>
+          <small>{fineDashboard.paidFineItemCount} collected payments</small>
+        </button>
+        <button
+          type="button"
+          className={`fine-summary-tile ${fineDashboardView === 'week' ? 'active' : ''}`}
+          onClick={() => setFineDashboardView('week')}
+        >
+          <span>This Week</span>
+          <strong>{formatMoney(fineDashboard.paidThisWeek)}</strong>
+          <small>Fine income collected this week</small>
+        </button>
+        <button
+          type="button"
+          className={`fine-summary-tile ${fineDashboardView === 'year' ? 'active' : ''}`}
+          onClick={() => setFineDashboardView('year')}
+        >
+          <span>This Year</span>
+          <strong>{formatMoney(fineDashboard.paidThisYear)}</strong>
+          <small>Fine income collected this year</small>
+        </button>
+      </div>
+
+      <div className="fine-collection-table">
+        <div className="fine-table-title">
+          <h4>{fineDashboardView === 'unpaid' ? 'Who Has Not Paid' : 'Who Paid Fines'}</h4>
+          <span>
+            {fineDashboardView === 'unpaid'
+              ? `${fineDashboard.fineItemCount} unpaid`
+              : `${fineDashboard.paidFineItemCount} paid`}
+          </span>
+        </div>
+
+        {fineDashboardLoading ? (
+          <div className="fine-empty-state">Loading fine dashboard...</div>
+        ) : fineDashboardView === 'unpaid' && fineDashboard.fineItems.length > 0 ? (
+          <div className="loan-table-wrapper">
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>Borrower</th>
+                  <th>Book</th>
+                  <th>ISBN</th>
+                  <th>Due Date</th>
+                  <th>Returned</th>
+                  <th>Fine</th>
+                  <th>Payment</th>
+                </tr>
+              </thead>
+              <tbody>
+                {fineDashboard.fineItems.map((item) => (
+                  <tr key={item.loanId}>
+                    <td>
+                      <div className="loan-record-title">{item.userName}</div>
+                      <div className="loan-record-meta">{item.userEmail}</div>
+                    </td>
+                    <td>{item.bookTitle}</td>
+                    <td>{item.isbn}</td>
+                    <td>{formatDateLabel(item.dueDate)}</td>
+                    <td>{formatDateLabel(item.returnDate)}</td>
+                    <td className="fine-amount-cell">{formatMoney(item.fineAmount)}</td>
+                    <td>
+                      <button
+                        type="button"
+                        className="btn-sm btn-alipay"
+                        disabled={payingFineId === item.loanId}
+                        onClick={() => openAlipayModal(item)}
+                      >
+                        Alipay
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : fineDashboardView !== 'unpaid' && getVisiblePaidFineItems().length > 0 ? (
+          <div className="loan-table-wrapper">
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>Borrower</th>
+                  <th>Book</th>
+                  <th>Paid Amount</th>
+                  <th>Paid At</th>
+                  <th>Method</th>
+                  <th>Collector</th>
+                </tr>
+              </thead>
+              <tbody>
+                {getVisiblePaidFineItems().map((item) => (
+                    <tr key={item.paymentId}>
+                      <td>
+                        <div className="loan-record-title">{item.userName}</div>
+                        <div className="loan-record-meta">{item.userEmail}</div>
+                      </td>
+                      <td>
+                        <div className="loan-record-title">{item.bookTitle}</div>
+                        <div className="loan-record-meta">ISBN: {item.isbn}</div>
+                      </td>
+                      <td className="fine-paid-cell">{formatMoney(item.paidAmount)}</td>
+                      <td>{formatDateLabel(item.paidAt)}</td>
+                      <td>{item.method}</td>
+                      <td>
+                        <div className="loan-record-title">{item.collectorName}</div>
+                        <div className="loan-record-meta">{item.collectorEmail}</div>
+                      </td>
+                    </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <div className="fine-empty-state">
+            {fineDashboardView === 'unpaid'
+              ? 'No unpaid fines to collect today.'
+              : 'No paid fine records for this view.'}
+          </div>
+        )}
+      </div>
+    </div>
+  )
+
+  const renderAlipayModal = () => (
+    <div className="modal-overlay" onClick={closeAlipayModal}>
+      <div className="modal-content modal-small" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-header">
+          <h3>Alipay Fine Payment</h3>
+          <button className="modal-close" onClick={closeAlipayModal}>×</button>
+        </div>
+        <form onSubmit={handleAlipayFine} noValidate>
+          <div className="modal-body">
+            <div className="alipay-ticket">
+              <span>Amount</span>
+              <strong>{formatMoney(alipayTarget?.fineAmount)}</strong>
+              <p>Order: FINE-{alipayTarget?.loanId}</p>
+            </div>
+
+            <p className="book-title-highlight">{alipayTarget?.bookTitle}</p>
+            <div className="return-confirm-detail">Borrower: {alipayTarget?.userName}</div>
+            <div className="return-confirm-detail">ISBN: {alipayTarget?.isbn}</div>
+            <div className="return-confirm-detail">Due Date: {formatDateLabel(alipayTarget?.dueDate)}</div>
+
+            {!alipayResult ? (
+              <div className="alipay-qr-payment">
+                <p>Scan the QR code with Alipay, complete the payment, then click I Have Paid.</p>
+                <img src="/alipay-qr.png" alt="Alipay QR Code" />
+              </div>
+            ) : (
+              <div className="alipay-success-box">
+                <strong>Payment successful</strong>
+                <p>Alipay Trade No: {alipayResult.alipayTradeNo}</p>
+                <p>Out Trade No: {alipayResult.outTradeNo}</p>
+              </div>
+            )}
+          </div>
+          <div className="modal-footer">
+            <button type="button" className="btn-secondary" onClick={closeAlipayModal}>
+              {alipayResult ? 'Close' : 'Cancel'}
+            </button>
+            {!alipayResult && (
+              <button className="btn-alipay btn-sm" type="submit" disabled={payingFineId === alipayTarget?.loanId}>
+                {payingFineId === alipayTarget?.loanId ? 'Confirming...' : 'I Have Paid'}
+              </button>
+            )}
+          </div>
+        </form>
+      </div>
+    </div>
+  )
+
   const renderDashboard = () => (
     <div className="content">
       <div className="welcome-banner">
@@ -738,32 +1273,49 @@ const LibrarianDashboard = ({
         <div className="stat-card">
           <div className="stat-icon blue">📖</div>
           <div className="stat-content">
-            <h3>{stats.totalBooks}</h3>
+            <h3>{fineDashboard.totalBooks}</h3>
             <p>Total Books</p>
           </div>
         </div>
         <div className="stat-card">
           <div className="stat-icon green">✅</div>
           <div className="stat-content">
-            <h3>{stats.availableBooks}</h3>
-            <p>Available</p>
+            <h3>{fineDashboard.booksInLibrary}</h3>
+            <p>Books in Library</p>
           </div>
         </div>
         <div className="stat-card">
           <div className="stat-icon orange">📋</div>
           <div className="stat-content">
-            <h3>{stats.myLoans}</h3>
-            <p>Active Loans</p>
+            <h3>{fineDashboard.checkedOutBooks}</h3>
+            <p>Checked Out</p>
           </div>
         </div>
+        <button type="button" className="stat-card stat-card-button" onClick={() => setFineDashboardView('unpaid')}>
+          <div className="stat-icon red">🕒</div>
+          <div className="stat-content">
+            <h3>{formatMoney(fineDashboard.unpaidFineTotal ?? fineDashboard.fineDueToday)}</h3>
+            <p>Unpaid Fines</p>
+          </div>
+        </button>
+        <button type="button" className="stat-card stat-card-button" onClick={() => setFineDashboardView('paid')}>
+          <div className="stat-icon blue">💳</div>
+          <div className="stat-content">
+            <h3>{formatMoney(fineDashboard.paidFineTotal)}</h3>
+            <p>Paid Fines</p>
+          </div>
+        </button>
         <div className="stat-card">
           <div className="stat-icon red">🕒</div>
           <div className="stat-content">
-            <h3>{loanRecords.filter(loan => loan.status === 'Overdue').length}</h3>
-            <p>Overdue Loans</p>
+            <h3>{fineDashboard.overdueBooks}</h3>
+            <p>Overdue Books</p>
           </div>
         </div>
       </div>
+
+      {renderFineDashboardPanel()}
+      {alipayTarget && renderAlipayModal()}
 
       <div className="quick-actions">
         <h3>Quick Actions</h3>
@@ -795,8 +1347,8 @@ const LibrarianDashboard = ({
                 <td>{book.isbn}</td>
                 <td>{book.genre}</td>
                 <td>
-                  <span className={`status-badge ${book.available ? 'success' : 'danger'}`}>
-                    {book.available ? 'Available' : 'Borrowed'}
+                  <span className={`status-badge ${getBookStatusBadgeClass(book)}`}>
+                    {getBookStatusLabel(book)}
                   </span>
                 </td>
               </tr>
@@ -810,7 +1362,8 @@ const LibrarianDashboard = ({
 
   // Render Books view with search
   const renderBooks = () => {
-    const displayBooks = searchResults.length > 0 ? searchResults : books
+    const isSearchMode = Boolean(activeSearchTerm)
+    const displayBooks = isSearchMode ? searchResults : books
 
     return (
       <div className="content">
@@ -821,10 +1374,21 @@ const LibrarianDashboard = ({
         {/* Search Box */}
         <div className="search-section">
           <form onSubmit={handleSearch} className="search-form">
+            <select
+              className="search-select"
+              value={searchType}
+              onChange={(e) => setSearchType(e.target.value)}
+              aria-label="Search type"
+            >
+              <option value="all">All Fields</option>
+              <option value="title">Title</option>
+              <option value="author">Author</option>
+              <option value="isbn">ISBN</option>
+            </select>
             <input
               type="text"
               className="search-input"
-              placeholder="Search by title or author"
+              placeholder={searchType === 'isbn' ? 'Enter ISBN...' : 'Search by title, author, or ISBN...'}
               value={searchKeyword}
               onChange={(e) => setSearchKeyword(e.target.value)}
             />
@@ -837,6 +1401,7 @@ const LibrarianDashboard = ({
                 className="btn-secondary"
                 onClick={() => {
                   setSearchKeyword('')
+                  setActiveSearchTerm('')
                   setSearchResults([])
                 }}
               >
@@ -861,19 +1426,28 @@ const LibrarianDashboard = ({
                 <p className="book-detail">Location: {book.shelfLocation || 'N/A'}</p>
                 <p className="book-detail">Copies: {book.availableCopies}</p>
                 <div className="book-status">
-                  <span className={`status-badge ${book.available ? 'success' : 'danger'}`}>
-                    {book.available ? 'Available' : 'Borrowed'}
+                  <span className={`status-badge ${getBookStatusBadgeClass(book)}`}>
+                    {getBookStatusLabel(book)}
                   </span>
                 </div>
+                <button
+                  type="button"
+                  className="btn-sm btn-secondary book-copy-barcode-btn"
+                  onClick={() => openCopyBarcodeModal(book)}
+                  disabled={copyBarcodeLoadingId === book.id}
+                >
+                  {copyBarcodeLoadingId === book.id ? 'Loading...' : 'Copies / Barcode'}
+                </button>
               </div>
             </div>
           ))}
         </div>
         {displayBooks.length === 0 && !loading && (
           <div className="no-data">
-            {searchKeyword ? 'No books found matching your search' : 'No books found'}
+            {isSearchMode ? `No books found for "${activeSearchTerm}"` : 'No books found'}
           </div>
         )}
+        {copyBarcodeTarget && renderCopyBarcodeModal()}
       </div>
     )
   }
@@ -910,6 +1484,7 @@ const LibrarianDashboard = ({
                 <option value="">All Status</option>
                 <option value="available">Available</option>
                 <option value="borrowed">Borrowed</option>
+                <option value="unavailable">Unavailable</option>
               </select>
             </div>
           </div>
@@ -930,8 +1505,8 @@ const LibrarianDashboard = ({
                   <th onClick={() => handleSort('genre')} style={{ cursor: 'pointer' }}>
                     Genre{getSortIcon('genre')}
                   </th>
-                  <th onClick={() => handleSort('available')} style={{ cursor: 'pointer' }}>
-                    Available{getSortIcon('available')}
+                  <th onClick={() => handleSort('displayStatus')} style={{ cursor: 'pointer' }}>
+                    Status{getSortIcon('displayStatus')}
                   </th>
                   <th onClick={() => handleSort('availableCopies')} style={{ cursor: 'pointer' }}>
                     Copies{getSortIcon('availableCopies')}
@@ -947,12 +1522,19 @@ const LibrarianDashboard = ({
                     <td>{book.isbn}</td>
                     <td>{book.genre}</td>
                     <td>
-                      <span className={`status-badge ${book.available ? 'success' : 'danger'}`}>
-                        {book.available ? 'Yes' : 'No'}
+                      <span className={`status-badge ${getBookStatusBadgeClass(book)}`}>
+                        {getBookStatusLabel(book)}
                       </span>
                     </td>
                     <td>{book.availableCopies}</td>
                     <td className="action-buttons-cell">
+                      <button
+                        className="btn-sm btn-secondary"
+                        onClick={() => openCopyBarcodeModal(book)}
+                        disabled={copyBarcodeLoadingId === book.id}
+                      >
+                        {copyBarcodeLoadingId === book.id ? 'Loading...' : 'Copies / Barcode'}
+                      </button>
                       <button className="btn-sm btn-edit" onClick={() => openEditModal(book)}>Edit</button>
                       <button className="btn-sm btn-delete" onClick={() => openDeleteConfirm(book)}>Delete</button>
                     </td>
@@ -968,6 +1550,7 @@ const LibrarianDashboard = ({
         {showAddModal && renderAddModal()}
         {showEditModal && renderEditModal()}
         {showDeleteConfirm && renderDeleteConfirm()}
+        {copyBarcodeTarget && renderCopyBarcodeModal()}
       </div>
     )
   }
@@ -1003,23 +1586,48 @@ const LibrarianDashboard = ({
             </div>
 
             <div className="form-group">
-              <label>Book ISBN / Book ID *</label>
-              <input
-                type="text"
-                value={checkoutForm.bookIdentifier}
-                onChange={(e) => {
-                  setCheckoutForm(prev => ({ ...prev, bookIdentifier: e.target.value }))
-                  setCheckoutErrors(prev => ({ ...prev, bookIdentifier: '' }))
-                }}
-                placeholder="Enter ISBN or book ID"
-              />
+              <label>Barcode / ISBN *</label>
+              <div className="barcode-input-row">
+                <input
+                  type="text"
+                  value={checkoutForm.bookIdentifier}
+                  onChange={(e) => {
+                    setCheckoutForm(prev => ({ ...prev, bookIdentifier: e.target.value }))
+                    setCheckoutErrors(prev => ({ ...prev, bookIdentifier: '' }))
+                    setBarcodeBook(null)
+                  }}
+                  placeholder="Scan barcode or enter ISBN"
+                />
+                <button
+                  type="button"
+                  className="btn-secondary"
+                  disabled={barcodeLookupLoading || checkoutLoading}
+                  onClick={handleBarcodeLookup}
+                >
+                  {barcodeLookupLoading ? 'Looking up...' : 'Lookup'}
+                </button>
+              </div>
               {checkoutErrors.bookIdentifier && (
                 <div className="field-error">{checkoutErrors.bookIdentifier}</div>
               )}
             </div>
 
+            {barcodeBook && (
+              <div className={`barcode-result ${getBookDisplayStatus(barcodeBook) === 'AVAILABLE' ? 'available' : 'unavailable'}`}>
+                <div>
+                  <span className="barcode-result-label">Matched Book</span>
+                  <strong>{barcodeBook.title}</strong>
+                  <p>{barcodeBook.author} · ISBN: {barcodeBook.isbn}</p>
+                  <p>Location: {barcodeBook.shelfLocation || 'N/A'} · Copies: {barcodeBook.availableCopies}</p>
+                </div>
+                <span className={`status-badge ${getBookStatusBadgeClass(barcodeBook)}`}>
+                  {getBookStatusLabel(barcodeBook)}
+                </span>
+              </div>
+            )}
+
             <p className="loan-form-hint">
-              The system validates the borrower, checks inventory, and blocks checkout when unpaid fines exist.
+              Scan with a hardware barcode scanner or type the ISBN, then look it up before checkout.
             </p>
 
             <div className="loan-actions-row">
@@ -1033,6 +1641,7 @@ const LibrarianDashboard = ({
                 onClick={() => {
                   setCheckoutForm({ userId: '', bookIdentifier: '' })
                   setCheckoutErrors({})
+                  setBarcodeBook(null)
                 }}
               >
                 Reset
@@ -1631,6 +2240,44 @@ const LibrarianDashboard = ({
             </button>
           </div>
         </form>
+      </div>
+    </div>
+  )
+
+  const renderCopyBarcodeModal = () => (
+    <div className="modal-overlay" onClick={() => setCopyBarcodeTarget(null)}>
+      <div className="modal-content copy-barcode-modal" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-header">
+          <h3>Copy Barcodes</h3>
+          <button className="modal-close" onClick={() => setCopyBarcodeTarget(null)}>×</button>
+        </div>
+        <div className="modal-body">
+          <p className="book-title-highlight">{copyBarcodeTarget?.title}</p>
+          <div className="return-confirm-detail">ISBN: {copyBarcodeTarget?.isbn}</div>
+          <div className="return-confirm-detail">Shelf: {copyBarcodeTarget?.shelfLocation || 'N/A'}</div>
+
+          {copyBarcodeTarget?.copies?.length > 0 ? (
+            <div className="copy-barcode-grid">
+              {copyBarcodeTarget.copies.map((copy, index) => (
+                <div className="copy-barcode-card" key={copy.id}>
+                  <CopyBarcode value={copy.barcode} />
+                  <div className="copy-barcode-meta">
+                    <strong>Copy {index + 1}</strong>
+                    <span>{copy.barcode}</span>
+                    <em className={copy.available ? 'copy-available' : 'copy-borrowed'}>
+                      {copy.available ? 'Available' : 'Borrowed'}
+                    </em>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="fine-empty-state">No physical copies found for this book.</div>
+          )}
+        </div>
+        <div className="modal-footer">
+          <button className="btn-secondary" onClick={() => setCopyBarcodeTarget(null)}>Close</button>
+        </div>
       </div>
     </div>
   )

@@ -24,6 +24,7 @@ backend/dev.db-journal
 # Local tool directories
 .codex/
 .cursor/
+.codegraph/
 
 # Logs
 logs/

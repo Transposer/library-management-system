@@ -5,6 +5,10 @@ import AdminOverview from './pages/AdminOverview'
 import UserManagement from './pages/UserManagement'
 import SystemConfig from './pages/SystemConfig'
 import AuditLogs from './pages/AuditLogs'
+import BackupManagement from './pages/BackupManagement'
+import AnnouncementManagement from './pages/AnnouncementManagement'
+import Reports from './pages/Reports'
+import AcquisitionManagement from './pages/AcquisitionManagement'
 
 const PAGE_NAME = {
   [ADMIN_PAGES.OVERVIEW]: 'Overview',
@@ -12,7 +16,11 @@ const PAGE_NAME = {
   [ADMIN_PAGES.LIBRARIAN_MANAGE]: 'Librarian Manage',
   [ADMIN_PAGES.ROLE_PERMISSION]: 'Role Permission',
   [ADMIN_PAGES.SYSTEM_CONFIG]: 'System Config',
-  [ADMIN_PAGES.AUDIT_LOGS]: 'Audit Logs'
+  [ADMIN_PAGES.AUDIT_LOGS]: 'Audit Logs',
+  [ADMIN_PAGES.BACKUP_MANAGE]: 'Backup Manage',
+  [ADMIN_PAGES.ANNOUNCEMENT_MANAGE]: 'Announcement Manage',
+  [ADMIN_PAGES.REPORTS]: 'Reports',
+  [ADMIN_PAGES.ACQUISITION_MANAGE]: 'Acquisition Manage'
 }
 
 const AdminDashboard = ({ user, handleLogout, getRoleName }) => {
@@ -36,9 +44,15 @@ const AdminDashboard = ({ user, handleLogout, getRoleName }) => {
       case ADMIN_PAGES.SYSTEM_CONFIG:
         return <SystemConfig currentUserId={currentUserId} onNotify={notify} />
       case ADMIN_PAGES.AUDIT_LOGS:
-        return (
-          <AuditLogs currentUserId={currentUserId} onNotify={notify} />
-        )
+        return <AuditLogs currentUserId={currentUserId} onNotify={notify} />
+      case ADMIN_PAGES.BACKUP_MANAGE:
+        return <BackupManagement currentUserId={currentUserId} onNotify={notify} />
+      case ADMIN_PAGES.ANNOUNCEMENT_MANAGE:
+        return <AnnouncementManagement currentUserId={currentUserId} onNotify={notify} />
+      case ADMIN_PAGES.REPORTS:
+        return <Reports currentUserId={currentUserId} onNotify={notify} />
+      case ADMIN_PAGES.ACQUISITION_MANAGE:
+        return <AcquisitionManagement currentUserId={currentUserId} onNotify={notify} />
       case ADMIN_PAGES.OVERVIEW:
       default:
         return <AdminOverview user={user} onNavigate={setCurrentPage} />
@@ -58,16 +72,30 @@ const AdminDashboard = ({ user, handleLogout, getRoleName }) => {
             <span className="icon">🧩</span>
             <span>User Manage</span>
           </div>
-
           <div className={`menu-item ${currentPage === ADMIN_PAGES.SYSTEM_CONFIG ? 'active' : ''}`} onClick={() => setCurrentPage(ADMIN_PAGES.SYSTEM_CONFIG)}>
             <span className="icon">⚙️</span>
             <span>System Config</span>
+          </div>
+          <div className={`menu-item ${currentPage === ADMIN_PAGES.BACKUP_MANAGE ? 'active' : ''}`} onClick={() => setCurrentPage(ADMIN_PAGES.BACKUP_MANAGE)}>
+            <span className="icon">💾</span>
+            <span>Backup Manage</span>
+          </div>
+          <div className={`menu-item ${currentPage === ADMIN_PAGES.ANNOUNCEMENT_MANAGE ? 'active' : ''}`} onClick={() => setCurrentPage(ADMIN_PAGES.ANNOUNCEMENT_MANAGE)}>
+            <span className="icon">📢</span>
+            <span>Announcement Manage</span>
+          </div>
+          <div className={`menu-item ${currentPage === ADMIN_PAGES.REPORTS ? 'active' : ''}`} onClick={() => setCurrentPage(ADMIN_PAGES.REPORTS)}>
+            <span className="icon">📊</span>
+            <span>Reports</span>
+          </div>
+          <div className={`menu-item ${currentPage === ADMIN_PAGES.ACQUISITION_MANAGE ? 'active' : ''}`} onClick={() => setCurrentPage(ADMIN_PAGES.ACQUISITION_MANAGE)}>
+            <span className="icon">📋</span>
+            <span>Acquisition Manage</span>
           </div>
           <div className={`menu-item ${currentPage === ADMIN_PAGES.AUDIT_LOGS ? 'active' : ''}`} onClick={() => setCurrentPage(ADMIN_PAGES.AUDIT_LOGS)}>
             <span className="icon">📜</span>
             <span>Audit Logs</span>
           </div>
-
         </nav>
         <div className="user-info">
           <div className="user-avatar">{user.name?.[0]?.toUpperCase() || 'A'}</div>

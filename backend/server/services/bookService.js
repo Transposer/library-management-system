@@ -48,6 +48,18 @@ function toBookSummary(book, ratingMap) {
   };
 }
 
+function buildIsbnSearchConditions(keyword) {
+  const trimmedKeyword = keyword.trim();
+  const compactKeyword = trimmedKeyword.replace(/[\s-]/g, "");
+  const conditions = [{ isbn: { contains: trimmedKeyword } }];
+
+  if (compactKeyword && compactKeyword !== trimmedKeyword) {
+    conditions.push({ isbn: { contains: compactKeyword } });
+  }
+
+  return conditions;
+}
+
 function toBookCopySummary(copy) {
   return {
     id: copy.id,
@@ -88,16 +100,28 @@ async function searchBooks(query) {
     throw new AppError(400, "Missing keyword or invalid parameters");
   }
 
-  if (type && !["title", "author"].includes(type)) {
+  const trimmedKeyword = keyword.trim();
+
+  if (!trimmedKeyword) {
+    throw new AppError(400, "Missing keyword or invalid parameters");
+  }
+
+  if (type && !["title", "author", "isbn"].includes(type)) {
     throw new AppError(400, "Invalid parameters");
   }
 
   const searchConditions =
     type === "title"
-      ? [{ title: { contains: keyword } }]
+      ? [{ title: { contains: trimmedKeyword } }]
       : type === "author"
-        ? [{ author: { contains: keyword } }]
-        : [{ title: { contains: keyword } }, { author: { contains: keyword } }];
+        ? [{ author: { contains: trimmedKeyword } }]
+        : type === "isbn"
+          ? buildIsbnSearchConditions(trimmedKeyword)
+          : [
+              { title: { contains: trimmedKeyword } },
+              { author: { contains: trimmedKeyword } },
+              ...buildIsbnSearchConditions(trimmedKeyword),
+            ];
 
   const where = {
     OR: searchConditions,
@@ -239,11 +263,13 @@ async function getBooksWithFilters(query) {
   // Build filter conditions.
   let where = {};
   
-  // Keyword search (title or author).
+  // Keyword search (title, author, or ISBN).
   if (query.keyword && typeof query.keyword === 'string') {
+    const keyword = query.keyword.trim();
     where.OR = [
-      { title: { contains: query.keyword } },
-      { author: { contains: query.keyword } }
+      { title: { contains: keyword } },
+      { author: { contains: keyword } },
+      ...buildIsbnSearchConditions(keyword)
     ];
   }
   

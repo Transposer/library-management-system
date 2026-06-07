@@ -146,14 +146,152 @@ async function scrapeKongfz(isbn) {
 // Valid genre and language values from Prisma schema
 const VALID_GENRES = ["Technology", "Fiction", "Science", "History", "Management"];
 const VALID_LANGUAGES = ["Chinese", "English", "Others"];
+const ACTIVE_LOAN_STATUSES = ["Borrowing", "Overdue"];
 
-function buildBookCopyCreateManyData(book, copyCount) {
+function buildIsbnSearchConditions(keyword) {
+  const compactKeyword = keyword.replace(/[\s-]/g, "");
+  const conditions = [{ isbn: { contains: keyword } }];
+
+  if (compactKeyword && compactKeyword !== keyword) {
+    conditions.push({ isbn: { contains: compactKeyword } });
+  }
+
+  return conditions;
+}
+
+function normalizeBarcodeValue(value) {
+  const raw = typeof value === "string" ? value.trim() : "";
+  const withoutPrefix = raw.replace(/^(isbn|book|bookid|book-id)\s*[:#-]\s*/i, "").trim();
+
+  return {
+    raw,
+    normalized: withoutPrefix,
+    compact: withoutPrefix.replace(/[\s-]/g, ""),
+  };
+}
+
+function buildBookStatus(book, borrowedCopies = 0) {
+  if (book.available && book.availableCopies > 0) {
+    return "AVAILABLE";
+  }
+
+  if (borrowedCopies > 0) {
+    return "BORROWED";
+  }
+
+  return "UNAVAILABLE";
+}
+
+async function getBorrowedCopyMap(bookIds) {
+  if (!bookIds.length) {
+    return new Map();
+  }
+
+  const grouped = await prisma.loan.groupBy({
+    by: ["bookId"],
+    where: {
+      bookId: {
+        in: bookIds,
+      },
+      status: {
+        in: ACTIVE_LOAN_STATUSES,
+      },
+    },
+    _count: {
+      id: true,
+    },
+  });
+
+  return new Map(grouped.map((item) => [item.bookId, item._count.id]));
+}
+
+async function getBorrowedCopies(bookId) {
+  const borrowedMap = await getBorrowedCopyMap([bookId]);
+  return borrowedMap.get(bookId) || 0;
+}
+
+function getStartOfWeek(date) {
+  const start = new Date(date);
+  start.setHours(0, 0, 0, 0);
+  const day = start.getDay();
+  const diff = day === 0 ? -6 : 1 - day;
+  start.setDate(start.getDate() + diff);
+  return start;
+}
+
+function getStartOfYear(date) {
+  return new Date(date.getFullYear(), 0, 1);
+}
+
+function parseAuditDetail(detail) {
+  if (!detail) {
+    return {};
+  }
+
+  try {
+    return JSON.parse(detail);
+  } catch (error) {
+    return {};
+  }
+}
+
+async function syncOverdueLoans() {
+  await prisma.loan.updateMany({
+    where: {
+      status: "Borrowing",
+      returnDate: null,
+      dueDate: { lt: new Date() },
+    },
+    data: {
+      status: "Overdue",
+    },
+  });
+}
+
+function buildBookCopyCreateManyData(book, copyCount, startIndex = 0) {
   return Array.from({ length: copyCount }, (_, index) => ({
     bookId: book.id,
-    barcode: `${book.isbn}-${String(index + 1).padStart(3, "0")}`,
+    barcode: `${book.isbn}-${String(startIndex + index + 1).padStart(3, "0")}`,
     shelfLocation: book.shelfLocation || null,
     available: true,
   }));
+}
+
+function buildMissingBookCopyData(book, existingCopies, missingCount) {
+  const existingBarcodes = new Set(existingCopies.map((copy) => copy.barcode));
+  const existingAvailableCount = existingCopies.filter((copy) => copy.available).length;
+  const availableToCreate = Math.max(Number(book.availableCopies || 0) - existingAvailableCount, 0);
+  const data = [];
+  let sequence = 1;
+
+  while (data.length < missingCount) {
+    const barcode = `${book.isbn}-${String(sequence).padStart(3, "0")}`;
+    sequence += 1;
+
+    if (existingBarcodes.has(barcode)) {
+      continue;
+    }
+
+    existingBarcodes.add(barcode);
+    data.push({
+      bookId: book.id,
+      barcode,
+      shelfLocation: book.shelfLocation || null,
+      available: data.length < availableToCreate,
+    });
+  }
+
+  return data;
+}
+
+function toBookCopySummary(copy) {
+  return {
+    id: copy.id,
+    barcode: copy.barcode,
+    shelfLocation: copy.shelfLocation,
+    available: copy.available,
+    createdAt: formatDateTime(copy.createdAt),
+  };
 }
 
 /**
@@ -317,10 +455,29 @@ async function viewBooks(query) {
 
   // Keyword search
   if (query.keyword && typeof query.keyword === "string") {
-    where.OR = [
-      { title: { contains: query.keyword } },
-      { author: { contains: query.keyword } },
-    ];
+    const keyword = query.keyword.trim();
+    const type = typeof query.type === "string" ? query.type.trim() : "";
+
+    if (!keyword) {
+      throw new AppError(400, "Invalid search keyword");
+    }
+
+    if (type && !["title", "author", "isbn"].includes(type)) {
+      throw new AppError(400, "Invalid search type");
+    }
+
+    where.OR =
+      type === "title"
+        ? [{ title: { contains: keyword } }]
+        : type === "author"
+          ? [{ author: { contains: keyword } }]
+          : type === "isbn"
+            ? buildIsbnSearchConditions(keyword)
+            : [
+                { title: { contains: keyword } },
+                { author: { contains: keyword } },
+                ...buildIsbnSearchConditions(keyword),
+              ];
   }
 
   // Genre filter
@@ -343,12 +500,236 @@ async function viewBooks(query) {
       orderBy: { createdAt: "desc" },
     }),
   ]);
+  const borrowedMap = await getBorrowedCopyMap(books.map((book) => book.id));
 
   return {
     total,
     page,
     size,
-    list: books.map(toBookSummary),
+    list: books.map((book) => toBookSummary(book, borrowedMap.get(book.id) || 0)),
+  };
+}
+
+async function getBookDetail(bookId) {
+  let book = await prisma.book.findUnique({
+    where: { id: bookId },
+    include: {
+      copies: {
+        orderBy: { createdAt: "asc" },
+      },
+    },
+  });
+
+  if (!book) {
+    throw new AppError(404, "Book not found");
+  }
+
+  const borrowedCopies = await getBorrowedCopies(book.id);
+  const expectedCopyCount = Math.max(
+    book.copies.length,
+    Number(book.availableCopies || 0) + borrowedCopies,
+  );
+  const missingCopyCount = expectedCopyCount - book.copies.length;
+
+  if (missingCopyCount > 0) {
+    await prisma.bookCopy.createMany({
+      data: buildMissingBookCopyData(book, book.copies, missingCopyCount),
+    });
+
+    book = await prisma.book.findUnique({
+      where: { id: bookId },
+      include: {
+        copies: {
+          orderBy: { createdAt: "asc" },
+        },
+      },
+    });
+  }
+
+  return {
+    ...toBookDetail(book, borrowedCopies),
+    copies: book.copies.map(toBookCopySummary),
+  };
+}
+
+/**
+ * Look up a book from a scanned barcode value.
+ *
+ * Barcode scanners usually submit plain text. In this project the barcode value
+ * is treated as either a Book ID or ISBN.
+ */
+async function lookupBarcode(code) {
+  const { raw, normalized, compact } = normalizeBarcodeValue(code);
+
+  if (!raw || !normalized) {
+    throw new AppError(400, "Barcode is required");
+  }
+
+  const isbnCandidates = Array.from(new Set([normalized, compact].filter(Boolean)));
+  const book = await prisma.book.findFirst({
+    where: {
+      OR: [
+        { id: normalized },
+        ...isbnCandidates.map((isbn) => ({ isbn })),
+      ],
+    },
+  });
+
+  if (!book) {
+    throw new AppError(404, "Book not found for this barcode");
+  }
+
+  const borrowedCopies = await getBorrowedCopies(book.id);
+
+  return {
+    ...toBookDetail(book, borrowedCopies),
+    barcode: raw,
+    barcodeType: book.id === normalized ? "BOOK_ID" : "ISBN",
+  };
+}
+
+/**
+ * Fine Dashboard metrics for librarians.
+ */
+async function getFineDashboard() {
+  await syncOverdueLoans();
+
+  const now = new Date();
+  const startOfWeek = getStartOfWeek(now);
+  const startOfYear = getStartOfYear(now);
+  const unpaidFineWhere = {
+    fineAmount: { gt: 0 },
+    finePaid: false,
+    fineForgiven: false,
+  };
+
+  const [bookCopySummary, bookCopyCount, checkedOutBooks, overdueBooks, unpaidFineLoans, paidFineLogs] = await Promise.all([
+    prisma.book.aggregate({
+      _sum: {
+        availableCopies: true,
+      },
+    }),
+    prisma.bookCopy.count(),
+    prisma.loan.count({
+      where: {
+        status: {
+          in: ACTIVE_LOAN_STATUSES,
+        },
+      },
+    }),
+    prisma.loan.count({
+      where: {
+        status: "Overdue",
+      },
+    }),
+    prisma.loan.findMany({
+      where: unpaidFineWhere,
+      include: {
+        book: true,
+        user: true,
+      },
+      orderBy: [
+        { dueDate: "asc" },
+        { returnDate: "desc" },
+      ],
+    }),
+    prisma.auditLog.findMany({
+      where: {
+        action: "PAY_FINE",
+        entity: "Loan",
+      },
+      include: {
+        user: true,
+      },
+      orderBy: {
+        createdAt: "desc",
+      },
+    }),
+  ]);
+
+  const paidLoanIds = Array.from(new Set(paidFineLogs.map((log) => log.entityId).filter(Boolean)));
+  const paidLoans = paidLoanIds.length
+    ? await prisma.loan.findMany({
+        where: {
+          id: {
+            in: paidLoanIds,
+          },
+        },
+        include: {
+          book: true,
+          user: true,
+        },
+      })
+    : [];
+  const paidLoanMap = new Map(paidLoans.map((loan) => [loan.id, loan]));
+
+  const fineItems = unpaidFineLoans.map((loan) => ({
+    loanId: loan.id,
+    userId: loan.userId,
+    userName: loan.user?.name || "Unknown user",
+    userEmail: loan.user?.email || "-",
+    studentId: loan.user?.studentId || "-",
+    bookId: loan.bookId,
+    bookTitle: loan.book?.title || "This book is no longer available",
+    isbn: loan.book?.isbn || "-",
+    dueDate: formatDateTime(loan.dueDate),
+    returnDate: loan.returnDate ? formatDateTime(loan.returnDate) : null,
+    fineAmount: Number(loan.fineAmount),
+    status: loan.status,
+  }));
+
+  const paidFineItems = paidFineLogs.map((log) => {
+    const detail = parseAuditDetail(log.detail);
+    const loan = paidLoanMap.get(log.entityId);
+    const amount = Number(detail.amount ?? loan?.fineAmount ?? 0);
+
+    return {
+      paymentId: log.id,
+      loanId: log.entityId,
+      userId: loan?.userId || detail.borrowerId || "-",
+      userName: loan?.user?.name || "Unknown user",
+      userEmail: loan?.user?.email || "-",
+      studentId: loan?.user?.studentId || "-",
+      bookId: loan?.bookId || "-",
+      bookTitle: loan?.book?.title || "This book is no longer available",
+      isbn: loan?.book?.isbn || "-",
+      paidAmount: amount,
+      paidAt: formatDateTime(log.createdAt),
+      paidAtRaw: log.createdAt,
+      method: detail.method || "SIMULATED",
+      collectorName: log.user?.name || "Self service",
+      collectorEmail: log.user?.email || "-",
+      alipayTradeNo: detail.alipayTradeNo || null,
+      outTradeNo: detail.outTradeNo || null,
+    };
+  });
+
+  const booksInLibrary = bookCopySummary._sum.availableCopies || 0;
+  const totalBooks = Math.max(bookCopyCount, booksInLibrary + checkedOutBooks);
+  const unpaidFineTotal = fineItems.reduce((sum, item) => sum + item.fineAmount, 0);
+  const paidFineTotal = paidFineItems.reduce((sum, item) => sum + item.paidAmount, 0);
+  const paidThisWeek = paidFineItems
+    .filter((item) => item.paidAtRaw >= startOfWeek)
+    .reduce((sum, item) => sum + item.paidAmount, 0);
+  const paidThisYear = paidFineItems
+    .filter((item) => item.paidAtRaw >= startOfYear)
+    .reduce((sum, item) => sum + item.paidAmount, 0);
+
+  return {
+    totalBooks,
+    booksInLibrary,
+    checkedOutBooks,
+    overdueBooks,
+    unpaidFineTotal,
+    paidFineTotal,
+    paidThisWeek,
+    paidThisYear,
+    fineDueToday: unpaidFineTotal,
+    fineItemCount: fineItems.length,
+    fineItems,
+    paidFineItemCount: paidFineItems.length,
+    paidFineItems,
+    generatedAt: formatDateTime(new Date()),
   };
 }
 
@@ -374,7 +755,8 @@ async function scanBook(isbn) {
   });
 
   if (bookCopy) {
-    return toBookDetail(bookCopy.book);
+    const borrowedCopies = await getBorrowedCopies(bookCopy.book.id);
+    return toBookDetail(bookCopy.book, borrowedCopies);
   }
 
   // If not found by barcode, try to find by ISBN in Book table
@@ -386,7 +768,8 @@ async function scanBook(isbn) {
     throw new AppError(404, "Book not found with this ISBN");
   }
 
-  return toBookDetail(book);
+  const borrowedCopies = await getBorrowedCopies(book.id);
+  return toBookDetail(book, borrowedCopies);
 }
 
 function isValidIsbn(code) {
@@ -444,7 +827,7 @@ async function deleteBook(bookId, userId) {
 /**
  * Helper: Convert book to summary format
  */
-function toBookSummary(book) {
+function toBookSummary(book, borrowedCopies = 0) {
   return {
     id: book.id,
     title: book.title,
@@ -456,6 +839,8 @@ function toBookSummary(book) {
     shelfLocation: book.shelfLocation,
     available: book.available,
     availableCopies: book.availableCopies,
+    borrowedCopies,
+    displayStatus: buildBookStatus(book, borrowedCopies),
     createdAt: formatDateTime(book.createdAt),
   };
 }
@@ -463,7 +848,7 @@ function toBookSummary(book) {
 /**
  * Helper: Convert book to detail format
  */
-function toBookDetail(book) {
+function toBookDetail(book, borrowedCopies = 0) {
   return {
     id: book.id,
     title: book.title,
@@ -476,6 +861,8 @@ function toBookDetail(book) {
     shelfLocation: book.shelfLocation,
     available: book.available,
     availableCopies: book.availableCopies,
+    borrowedCopies,
+    displayStatus: buildBookStatus(book, borrowedCopies),
     createdAt: formatDateTime(book.createdAt),
   };
 }
@@ -484,6 +871,9 @@ module.exports = {
   addBook,
   editBook,
   viewBooks,
+  getBookDetail,
+  lookupBarcode,
+  getFineDashboard,
   deleteBook,
   scanBook,
   scrapeKongfz,

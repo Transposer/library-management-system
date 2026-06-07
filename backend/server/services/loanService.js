@@ -816,6 +816,87 @@ async function payFine(userId, loanId, payload) {
   });
 }
 
+async function librarianPayFine(loanId, payload, actorUserId) {
+  const amountInput = payload?.amount;
+  const authCode = typeof payload?.authCode === "string" ? payload.authCode.trim() : "";
+  const isSandboxAuthCode = !authCode || /^28\d{14,22}$/.test(authCode);
+
+  if (!isSandboxAuthCode) {
+    throw new AppError(400, "Invalid Alipay payment code");
+  }
+
+  return prisma.$transaction(async (tx) => {
+    const loan = await tx.loan.findUnique({
+      where: { id: loanId },
+      include: {
+        book: true,
+        user: true,
+      },
+    });
+
+    if (!loan) {
+      throw new AppError(404, "Loan record not found");
+    }
+
+    const fineAmount = Number(loan.fineAmount);
+    if (fineAmount <= 0 || loan.finePaid || loan.fineForgiven) {
+      throw new AppError(400, "This loan has no payable fine, or the payment amount is insufficient");
+    }
+
+    if (amountInput !== undefined) {
+      const amount = Number(amountInput);
+      if (!Number.isFinite(amount) || amount !== fineAmount) {
+        throw new AppError(400, "This loan has no payable fine, or the payment amount is insufficient");
+      }
+    }
+
+    const updatedLoan = await tx.loan.update({
+      where: { id: loanId },
+      data: {
+        finePaid: true,
+      },
+      include: {
+        book: true,
+        user: true,
+      },
+    });
+
+    const outTradeNo = `FINE-${loanId}`;
+    const alipayTradeNo = `ALI${Date.now()}${String(Math.floor(Math.random() * 1000000)).padStart(6, "0")}`;
+
+    await tx.auditLog.create({
+      data: {
+        userId: actorUserId,
+        action: "PAY_FINE",
+        entity: "Loan",
+        entityId: loanId,
+        detail: JSON.stringify({
+          amount: fineAmount,
+          method: "ALIPAY",
+          borrowerId: loan.userId,
+          confirmationMode: authCode ? "AUTH_CODE" : "QR_CONFIRMATION",
+          ...(authCode ? { authCodeTail: authCode.slice(-4) } : {}),
+          outTradeNo,
+          alipayTradeNo,
+        }),
+      },
+    });
+
+    return {
+      loanId: updatedLoan.id,
+      userId: updatedLoan.userId,
+      userName: updatedLoan.user?.name || "Unknown user",
+      bookId: updatedLoan.bookId,
+      bookTitle: updatedLoan.book?.title || "This book is no longer available",
+      fineAmount: Number(updatedLoan.fineAmount),
+      finePaid: updatedLoan.finePaid,
+      paymentMethod: "ALIPAY",
+      outTradeNo,
+      alipayTradeNo,
+    };
+  });
+}
+
 module.exports = {
   getCurrentLoans,
   createLoan,
@@ -827,4 +908,5 @@ module.exports = {
   librarianReturnLoan,
   returnLoanByBarcode,
   payFine,
+  librarianPayFine,
 };

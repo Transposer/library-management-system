@@ -62,5 +62,39 @@ export const adminApi = {
     method: 'PUT',
     body: JSON.stringify(body)
   }),
-  listAuditLogs: (params) => request(`/audit-logs${qs(params)}`)
+
+  listAuditLogs: (params) => request(`/audit-logs${qs(params)}`),
+
+  // Dashboard
+  getDashboardOverview: () => request('/dashboard/overview'),
+  getLoanTrends: (period = '30d') => request(`/dashboard/loan-trends?period=${period}`),
+  getPopularBooks: (limit = 10) => request(`/dashboard/popular-books?limit=${limit}`),
+  getRecentActivities: (limit = 20) => request(`/dashboard/recent-activities?limit=${limit}`),
+
+  // Backup
+  createBackup: () => request('/backup', { method: 'POST' }),
+  listBackups: (params) => request(`/backup${qs(params)}`),
+  deleteBackup: (id) => request(`/backup/${id}`, { method: 'DELETE' }),
+  getBackupDownloadUrl: (id) => `${API_BASE}/backup/${id}/download`,
+
+  // Announcement
+  listAnnouncements: (params) => request(`/announcements${qs(params)}`),
+  createAnnouncement: (body) => request('/announcements', { method: 'POST', body: JSON.stringify(body) }),
+  updateAnnouncement: (id, body) => request(`/announcements/${id}`, { method: 'PUT', body: JSON.stringify(body) }),
+  deleteAnnouncement: (id) => request(`/announcements/${id}`, { method: 'DELETE' }),
+  publishAnnouncement: (id) => request(`/announcements/${id}/publish`, { method: 'PUT' }),
+  unpublishAnnouncement: (id) => request(`/announcements/${id}/unpublish`, { method: 'PUT' }),
+
+  // Reports
+  getMonthlyBorrowingReport: (month) => request(`/dashboard/reports/borrowing?month=${encodeURIComponent(month)}`),
+  getOverdueStatsReport: (month) => request(`/dashboard/reports/overdue?month=${encodeURIComponent(month)}`),
+  getUsageSummaryReport: (month) => request(`/dashboard/reports/usage?month=${encodeURIComponent(month)}`),
+  getBorrowingExportUrl: (month) => `${API_BASE}/dashboard/reports/borrowing/export?month=${encodeURIComponent(month)}`,
+  getOverdueExportUrl: (month) => `${API_BASE}/dashboard/reports/overdue/export?month=${encodeURIComponent(month)}`,
+  getUsageExportUrl: (month) => `${API_BASE}/dashboard/reports/usage/export?month=${encodeURIComponent(month)}`,
+
+  // Acquisition
+  listAcquisitionRequests: (params) => request(`/acquisition-requests${qs(params)}`),
+  approveAcquisitionRequest: (id) => request(`/acquisition-requests/${id}/approve`, { method: 'PUT' }),
+  rejectAcquisitionRequest: (id, reason) => request(`/acquisition-requests/${id}/reject`, { method: 'PUT', body: JSON.stringify({ reason }) }),
 }

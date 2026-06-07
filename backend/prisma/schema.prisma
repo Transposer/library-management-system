@@ -229,3 +229,14 @@ model AcquisitionRequest {
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
+
+model BackupRecord {
+  id         String   @id @default(cuid())
+  fileName   String
+  filePath   String
+  fileSize   Int
+  operatorId String?
+  createdAt  DateTime @default(now())
+
+  @@index([createdAt])
+}

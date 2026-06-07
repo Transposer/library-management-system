@@ -8,6 +8,8 @@
     "test:smoke": "node tests/reader-release1.smoke.js",
     "test:admin": "node tests/admin-release1.smoke.js",
     "test:admin:r2": "node tests/admin-release2.smoke.js",
+    "test:admin:dashboard": "node tests/admin-dashboard.smoke.js",
+    "test:admin:r3": "node tests/admin-release3.smoke.js",
     "test:librarian-release2": "node tests/librarian-release2.smoke.js",
     "test:librarian-hold-release2": "node tests/librarian-hold-release2.smoke.js",
     "dev": "nodemon index.js",
@@ -27,6 +29,7 @@
     "cookie-parser": "^1.4.7",
     "cors": "^2.8.6",
     "dotenv": "^17.3.1",
+    "exceljs": "^4.4.0",
     "express": "^5.2.1",
     "prisma": "^7.4.2",
     "puppeteer": "^24.5.0"
