@@ -389,7 +389,7 @@ async function getOverdueStatsReport(month) {
       ],
       dueDate: { lt: rangeEnd },
     },
-    select: { id: true, bookId: true, dueDate: true, returnDate: true, checkoutDate: true, fineAmount: true, finePaid: true },
+    select: { id: true, bookId: true, dueDate: true, returnDate: true, checkoutDate: true, fineAmount: true, finePaid: true, status: true },
   });
 
   const totalCheckouts = await prisma.loan.count({
@@ -402,11 +402,21 @@ async function getOverdueStatsReport(month) {
   let overdueDaysSum = 0;
   let overdueReturned = 0;
   const bookOverdues = new Map();
-  const byDayMap = new Map();
+
+  // ── Daily snapshot: count books that are *currently* overdue on each day ──
+  const daysInMonth = new Date(year, mon, 0).getDate();
+  const dailyMap = new Map();
+  for (let d = 1; d <= daysInMonth; d++) {
+    const dayKey = `${year}-${String(mon).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+    dailyMap.set(dayKey, 0);
+  }
 
   loans.forEach((loan) => {
     const dueDate = new Date(loan.dueDate);
-    if (loan.status === "Overdue" || (loan.returnDate && new Date(loan.returnDate) > dueDate)) {
+    const returnDate = loan.returnDate ? new Date(loan.returnDate) : null;
+    const isOverdue = loan.status === "Overdue" || (returnDate && returnDate > dueDate);
+
+    if (isOverdue) {
       overdueCount += 1;
       const overdueDays = loan.returnDate
         ? Math.max(0, Math.ceil((new Date(loan.returnDate) - dueDate) / (1000 * 60 * 60 * 24)))
@@ -420,9 +430,14 @@ async function getOverdueStatsReport(month) {
         if (loan.finePaid) collectedFines += Number(loan.fineAmount);
       }
 
-      const dayKey = formatDateKey(dueDate);
-      if (dueDate >= rangeStart) {
-        byDayMap.set(dayKey, (byDayMap.get(dayKey) || 0) + 1);
+      // Overdue window within this month: start = when it became due, end = when returned (or month end)
+      const winStart = dueDate < rangeStart ? rangeStart : dueDate;
+      const winEnd = returnDate && returnDate < rangeEnd ? returnDate : rangeEnd;
+      let cursor = new Date(winStart);
+      while (cursor < winEnd) {
+        const dk = formatDateKey(cursor);
+        if (dailyMap.has(dk)) dailyMap.set(dk, dailyMap.get(dk) + 1);
+        cursor.setDate(cursor.getDate() + 1);
       }
 
       const entry = bookOverdues.get(loan.bookId) || { overdueCount: 0, totalDays: 0 };
@@ -453,7 +468,7 @@ async function getOverdueStatsReport(month) {
     };
   });
 
-  const byDayOverdue = Array.from(byDayMap.entries())
+  const byDayOverdue = Array.from(dailyMap.entries())
     .map(([day, count]) => ({ day, count }))
     .sort((a, b) => a.day.localeCompare(b.day));
 

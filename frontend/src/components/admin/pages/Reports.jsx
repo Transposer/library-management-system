@@ -163,6 +163,7 @@ const Reports = ({ currentUserId, onNotify }) => {
             xKey="date"
             yKey="checkouts"
             height={170}
+            barColor="#ef4444"
           />
         );
       case "usage":
@@ -262,7 +263,7 @@ const Reports = ({ currentUserId, onNotify }) => {
 
   const chartTitle = {
     borrowing: "Daily Checkouts",
-    overdue: "Daily New Overdues",
+    overdue: "Currently Overdue per Day",
     usage: "Daily Active Borrowers",
   }[activeTab];
 

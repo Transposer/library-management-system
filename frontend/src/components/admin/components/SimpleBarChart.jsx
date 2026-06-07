@@ -1,5 +1,5 @@
 // frontend/src/components/admin/components/SimpleBarChart.jsx
-export default function SimpleBarChart({ data, xKey, yKey, height = 150 }) {
+export default function SimpleBarChart({ data, xKey, yKey, height = 150, barColor }) {
   if (!data || data.length === 0) {
     return <div className="chart-placeholder">No data available</div>
   }
@@ -16,7 +16,7 @@ export default function SimpleBarChart({ data, xKey, yKey, height = 150 }) {
           <div key={idx} className="bar-wrapper" title={`${item[xKey]}: ${val}`}>
             <div
               className="bar"
-              style={{ height: `${barHeight}px` }}
+              style={{ height: `${barHeight}px`, backgroundColor: barColor || "#4f46e5" }}
             />
             <div className="bar-label">{item[xKey]}</div>
           </div>
